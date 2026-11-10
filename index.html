@@ -88,6 +88,55 @@ h1, h2, h3 { color: var(--gold); }
 .key:focus-visible { outline: none; }
 .key:focus-visible rect { stroke: var(--accent); stroke-width: 3; }
 
+/* Ritmo */
+.rs { width: 100%; height: auto; display: block; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+.rline { stroke: var(--staff); stroke-width: 1.5; }
+.rbar { stroke: var(--staff); stroke-width: 1.6; }
+.rbar.thick { stroke-width: 3.6; }
+.ts { font: 700 22px var(--f-display); fill: var(--staff); text-anchor: middle; }
+.cnt { font: 700 13px var(--f-body); fill: var(--muted); text-anchor: middle; }
+.cnt.on { fill: var(--gold); }
+.rn { color: var(--staff); }
+.rn .hd { fill: currentColor; }
+.rn .op { fill: none; stroke: currentColor; stroke-width: 2.3; }
+.rn .hole { fill: var(--surface); }
+.rn .st { stroke: currentColor; stroke-width: 1.8; }
+.rn .fl { fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; }
+.rn .bm { stroke: currentColor; }
+.rn .rp { fill: none; stroke: currentColor; stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; }
+.rn .hit { fill: transparent; }
+.rn.tap { cursor: pointer; }
+.rn.active { color: var(--accent); }
+.rn.ok { color: var(--ok); }
+.rn.bad { color: var(--bad); }
+.rn:focus-visible { outline: none; }
+.rn:focus-visible .hit { stroke: var(--accent); stroke-width: 2; fill: var(--accent-soft); }
+.ph { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.phq { font: 800 24px var(--f-display); fill: var(--gold); text-anchor: middle; }
+.bx { fill: var(--line); }
+.bx.on { fill: var(--accent); }
+.seg { fill: var(--line); }
+.seg.on { fill: var(--accent); opacity: .5; }
+.seg.now { fill: var(--accent); }
+.row { cursor: pointer; }
+.row:focus-visible { outline: none; }
+.row:focus-visible .seg { stroke: var(--accent); stroke-width: 2; }
+.pdot { fill: var(--line); }
+.pdot.on { fill: var(--accent); }
+.pal { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.vbtn { grid-column: span 2; display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 62px; padding: 6px 4px; border: 2px solid var(--line); border-radius: 12px; background: var(--surface); font-weight: 700; font-size: 13px; min-width: 0; }
+.vbtn:nth-child(n+4) { grid-column: span 3; }
+.vbtn:hover:not(:disabled) { border-color: var(--accent); }
+.vbtn:disabled { opacity: .5; cursor: default; }
+.vbtn span { min-width: 0; white-space: nowrap; }
+.mini { width: 30px; height: auto; flex: none; }
+.opt.rh { flex-direction: column; align-items: stretch; padding: 6px 6px 4px; min-height: 0; font: 700 14px var(--f-display); }
+.opt.rh small { align-self: flex-start; padding-left: 4px; }
+.opt.rh svg { width: 100%; height: auto; }
+.pad { width: 100%; margin-top: 14px; min-height: 96px; border-radius: 16px; border: 2px dashed var(--accent); background: var(--accent-soft); color: var(--gold); font: 800 22px var(--f-display); letter-spacing: .08em; touch-action: manipulation; }
+.pad:active:not(:disabled) { background: var(--accent); color: var(--accent-ink); }
+.pad:disabled { opacity: .45; cursor: default; }
+
 /* Inicio */
 .hero { padding-top: 8px; }
 .hero .fig { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 10px 8px 4px; }
@@ -238,6 +287,58 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     } catch (e) { /* sin audio */ }
   }
   function play(step, acc, clef) { playMidi(midiOf(step, acc, clef)); }
+  // Piano digital sintetizado: armónicos que se apagan a distinto ritmo, golpe de martillo y filtro que se cierra.
+  function pianoVoice(ctx, dest, m, dur, t) {
+    var f = 440 * Math.pow(2, (m - 69) / 12), d = Math.max(0.12, dur);
+    var tau = Math.max(0.9, Math.min(3.2, 2.6 * Math.pow(261.6 / f, 0.35)));
+    var master = ctx.createGain(), lp = ctx.createBiquadFilter(), rel = Math.min(0.09, d * 0.4);
+    lp.type = 'lowpass'; lp.Q.value = 0.5;
+    lp.frequency.setValueAtTime(Math.min(10000, f * 10), t);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(1200, f * 3), t + 0.8);
+    master.gain.setValueAtTime(0.0001, t);
+    master.gain.linearRampToValueAtTime(1, t + 0.004);
+    master.gain.setValueAtTime(1, t + d - rel);
+    master.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    var AMP = [1, 0.55, 0.3, 0.18, 0.1, 0.06];
+    for (var i = 0; i < AMP.length; i++) {
+      var n = i + 1, fr = f * n * Math.sqrt(1 + 0.0004 * n * n);
+      if (fr > 12000) break;
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = fr;
+      g.gain.setValueAtTime(0.11 * AMP[i], t);
+      g.gain.setTargetAtTime(0.00001, t + 0.01, tau / (1 + 0.8 * i));
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + d + 0.05);
+    }
+    var nb = ctx._nb;
+    if (!nb) {
+      nb = ctx._nb = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.03), ctx.sampleRate);
+      var ch = nb.getChannelData(0);
+      for (var k = 0; k < ch.length; k++) ch[k] = (Math.random() * 2 - 1) * (1 - k / ch.length);
+    }
+    var ns = ctx.createBufferSource(), bp = ctx.createBiquadFilter(), ng = ctx.createGain();
+    ns.buffer = nb; bp.type = 'bandpass'; bp.frequency.value = Math.min(6000, f * 4); bp.Q.value = 0.8; ng.gain.value = 0.05;
+    ns.connect(bp); bp.connect(ng); ng.connect(master); ns.start(t);
+    master.connect(lp); lp.connect(dest);
+  }
+  function playNote(m, dur) {
+    if (!soundOn) return;
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      pianoVoice(ac, ac.destination, m, dur, ac.currentTime);
+    } catch (e) { /* sin audio */ }
+  }
+  function playClick(acc) {
+    if (!soundOn) return;
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      if (ac.state === 'suspended') ac.resume();
+      var t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'square'; o.frequency.value = acc ? 1500 : 1000;
+      g.gain.setValueAtTime(0.1, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + 0.06);
+    } catch (e) { /* sin audio */ }
+  }
   function clearTimers() { timers.forEach(clearTimeout); timers = []; }
   function playSeq(ms, gap, each) {
     clearTimers();
@@ -353,16 +454,16 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
   // ---------- Estado y progreso ----------
   var app = document.getElementById('app');
   var steps = [], idx = 0, results = [], lessonN = 1;
-  var PKEY = 'compas-progreso-v2', OLDKEY = 'compas-progreso';
+  var PKEY = 'compas-progreso-v3', K2 = 'compas-progreso-v2', K1 = 'compas-progreso';
   function getProg() {
     try {
       var raw = localStorage.getItem(PKEY);
       if (raw) return JSON.parse(raw) || {};
-      var old = JSON.parse(localStorage.getItem(OLDKEY) || 'null');
-      if (old) {
-        var m = {}; if (old[1]) m[1] = old[1]; if (old[2]) m[3] = old[2]; if (old[3]) m[4] = old[3];
-        localStorage.setItem(PKEY, JSON.stringify(m)); return m;
-      }
+      var m = {}, v2 = JSON.parse(localStorage.getItem(K2) || 'null'), v1 = JSON.parse(localStorage.getItem(K1) || 'null');
+      if (v2) { if (v2[1]) m[1] = v2[1]; if (v2[2]) m[2] = v2[2]; if (v2[3]) m[5] = v2[3]; if (v2[4]) m[6] = v2[4]; }
+      else if (v1) { if (v1[1]) m[1] = v1[1]; if (v1[2]) m[5] = v1[2]; if (v1[3]) m[6] = v1[3]; }
+      if (Object.keys(m).length) localStorage.setItem(PKEY, JSON.stringify(m));
+      return m;
     } catch (e) { }
     return {};
   }
@@ -374,11 +475,14 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
   var COURSE = [
     { t: 'Notas en el pentagrama y clave de sol', d: 'Lee las notas desde el Do central hasta el La agudo.' },
     { t: 'Clave de fa: las notas graves', d: 'Lee los sonidos graves y encuentra el Do central, que queda justo encima del pentagrama.' },
+    { t: 'Duración de las notas y silencios', d: 'Redonda, blanca, negra, corchea y semicorchea, y los silencios que las acompañan.' },
+    { t: 'Tiempos y compases', d: 'El pulso, los compases 2/4, 3/4 y 4/4, y cómo llenar un compás.' },
     { t: 'El teclado y los semitonos', d: 'Teclas blancas y negras, tonos, semitonos, sostenidos y bemoles.' },
-    { t: 'Escalas mayores y tonalidades', d: 'El patrón de la escala mayor y por qué cada tonalidad lleva sostenidos o bemoles.' },
+    { t: 'Escalas mayores y menores', d: 'Los patrones de la escala mayor y menor, y por qué cada tonalidad lleva sostenidos o bemoles.' },
+    { t: 'Digitación', d: 'Qué dedo usar en cada tecla para tocar con comodidad.' },
     { t: 'Intervalos', d: 'La distancia entre dos notas: segundas, terceras, quintas y octavas.' },
-    { t: 'Acordes de tres notas', d: 'Tríadas mayores y menores, y cómo reconocerlas.' },
-    { t: 'Progresiones de acordes', d: 'I – IV – V – I y otras secuencias que se repiten en miles de canciones.' }
+    { t: 'Acordes e inversiones', d: 'Tríadas mayores y menores, y cómo cambian al invertirlas.' },
+    { t: 'Pedales del piano', d: 'Para qué sirve cada pedal y cuándo usarlo.' }
   ];
   function home() {
     clearTimers(); curClef = 'treble';
@@ -790,7 +894,7 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     pick([{ step: 1, acc: 1 }, { step: 4, acc: -1 }, { step: -2, acc: 1 }, { step: 0, acc: -1 }, { step: 3, acc: -1 }, { step: 2, acc: 1 }, { step: 5, acc: 0 }, { step: -1, acc: 0 }], 4)
       .forEach(function (it) { s.push(stepStaffToKey(it)); });
     var labels = {}; kbLayout(60, 8).forEach(function (k) { if (!k.black) labels[k.midi] = nameOf(k.midi); });
-    s.push(stepSummary(3, {
+    s.push(stepSummary(5, {
       title: 'Ya conoces el teclado',
       fig: keyboardSVG({ start: 60, whites: 8, labels: labels }),
       hint: 'Tu teclado completo: toca las teclas para escucharlas.',
@@ -809,8 +913,8 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     { k: 'F', name: 'Fa mayor', sharps: [], flats: [4], desc: '1 bemol: Si♭.', scale: [65, 67, 69, 70, 72, 74, 76, 77] },
     { k: 'B', name: 'Si♭ mayor', sharps: [], flats: [4, 7], desc: '2 bemoles: Si♭ y Mi♭.', scale: [70, 72, 74, 75, 77, 79, 81, 82] }
   ];
-  function patChips(done, cur) {
-    return PAT.map(function (t, i) { return '<span class="' + t + (i < done ? ' on' : '') + (i === cur ? ' cur' : '') + '">' + t + '</span>'; }).join('');
+  function patChips(done, cur, pat) {
+    return (pat || PAT).map(function (t, i) { return '<span class="' + t + (i < done ? ' on' : '') + (i === cur ? ' cur' : '') + '">' + t + '</span>'; }).join('');
   }
 
   function stepScaleWalk() {
@@ -860,7 +964,7 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
 
   function stepScaleBuild(c) {
     return function () {
-      var ints = [2, 2, 1, 2, 2, 2, 1], seq = [c.root];
+      var ints = c.ints || [2, 2, 1, 2, 2, 2, 1], pat = c.pat || PAT, seq = [c.root];
       for (var i = 0; i < 7; i++) seq.push(seq[i] + ints[i]);
       stageEl.innerHTML = head('Construye', c.title, c.lead) + figBox('fig') + '<div class="pat" id="pat"></div>' + fbBox();
       var fig = $('fig'), pos = 1, mistakes = 0, flash = null, finished = false;
@@ -869,7 +973,7 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
         for (var j = 0; j < pos; j++) { marks[seq[j]] = j === pos - 1 ? 'active' : 'ok'; labels[seq[j]] = c.names[j]; }
         if (flash !== null) marks[flash] = 'bad';
         fig.innerHTML = keyboardSVG({ start: c.root, whites: 8, marks: marks, labels: labels, label: 'Teclado de la escala' });
-        $('pat').innerHTML = patChips(Math.min(pos - 1, 7), pos < 8 ? pos - 1 : -1);
+        $('pat').innerHTML = patChips(Math.min(pos - 1, 7), pos < 8 ? pos - 1 : -1, pat);
         bindKeys(fig, tap);
       }
       function tap(m) {
@@ -880,18 +984,18 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
             finished = true; results.push(mistakes === 0);
             setFb('ok', '¡Escala de ' + c.short + ' completa!', c.done); unlock();
           } else {
-            var nt = PAT[pos - 1];
+            var nt = pat[pos - 1];
             setFb('info', '¡Bien!', 'Ahora sube un <b>' + (nt === 'T' ? 'tono (2 semitonos)' : 'semitono (1)') + '</b> desde ' + c.names[pos - 1] + '.');
           }
         } else {
           mistakes++; flash = m; playMidi(m); draw();
           var prev = seq[pos - 1], diff = m - prev, need = ints[pos - 1];
-          setFb('bad', 'Esa no es', diff > 0 ? 'Esa tecla está a ' + plural(diff, 'semitono', 'semitonos') + ' de ' + c.names[pos - 1] + ', y el patrón pide ' + plural(need, 'semitono', 'semitonos') + ' (' + PAT[pos - 1] + ').' : 'La escala sube: busca a la derecha de ' + c.names[pos - 1] + '.');
+          setFb('bad', 'Esa no es', diff > 0 ? 'Esa tecla está a ' + plural(diff, 'semitono', 'semitonos') + ' de ' + c.names[pos - 1] + ', y el patrón pide ' + plural(need, 'semitono', 'semitonos') + ' (' + pat[pos - 1] + ').' : 'La escala sube: busca a la derecha de ' + c.names[pos - 1] + '.');
           var my = pos; timers.push(setTimeout(function () { if (!finished && pos === my && flash === m) { flash = null; draw(); } }, 700));
         }
       }
       draw();
-      setFb('info', 'Empieza en ' + c.names[0], 'Toca la siguiente nota siguiendo el patrón <b>T T S T T T S</b>. Primero: un tono (2 semitonos).');
+      setFb('info', 'Empieza en ' + c.names[0], 'Toca la siguiente nota siguiendo el patrón <b>' + pat.join(' ') + '</b>. Primero: ' + (pat[0] === 'T' ? 'un tono (2 semitonos)' : 'un semitono (1)') + '.');
     };
   }
 
@@ -956,6 +1060,38 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     });
   }
 
+
+  function stepEarMM(minor) {
+    return function () {
+      var pool = minor ? [[69, 71, 72, 74, 76, 77, 79, 81], [62, 64, 65, 67, 69, 70, 72, 74], [64, 66, 67, 69, 71, 72, 74, 76]]
+                       : [[60, 62, 64, 65, 67, 69, 71, 72], [67, 69, 71, 72, 74, 76, 78, 79], [65, 67, 69, 70, 72, 74, 76, 77]];
+      var sc = pool[Math.floor(Math.random() * pool.length)], right = minor ? 'min' : 'maj';
+      stageEl.innerHTML = head('Escucha', '¿Mayor o menor?', 'Pulsa ▶ y escucha la escala. Las mayores suenan más brillantes; las menores, más oscuras.') +
+        '<div class="tools"><button class="btn ghost" id="hearS">▶ Escuchar la escala</button></div>' +
+        '<div class="opts" id="opts"><button class="opt" data-k="maj" disabled>Mayor</button><button class="opt" data-k="min" disabled>Menor</button></div>' + fbBox();
+      var opts = $('opts'), btn = $('hearS'), answered = false;
+      setFb('info', 'Primero escucha', 'Pulsa el botón. Puedes repetirla las veces que quieras.');
+      btn.addEventListener('click', function () {
+        btn.disabled = true; btn.textContent = '↻ Escuchar otra vez';
+        if (!answered) [].forEach.call(opts.children, function (x) { x.disabled = false; });
+        playSeq(sc, 330);
+        timers.push(setTimeout(function () { btn.disabled = false; }, sc.length * 330 + 200));
+      });
+      opts.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.opt') : null; if (!b || b.disabled || answered) return;
+        answered = true;
+        var ok = b.getAttribute('data-k') === right; results.push(ok);
+        [].forEach.call(opts.children, function (x) {
+          x.disabled = true;
+          if (x.getAttribute('data-k') === right) x.classList.add('ok'); else if (x === b) x.classList.add('bad'); else x.classList.add('dim');
+        });
+        setFb(ok ? 'ok' : 'bad', ok ? '¡Correcto!' : 'Era ' + (minor ? 'menor' : 'mayor'),
+          minor ? 'Es una escala <b>menor</b>: su tercera nota está un semitono más abajo, y por eso suena más oscura.' : 'Es una escala <b>mayor</b>: suena brillante y abierta.');
+        unlock();
+      });
+    };
+  }
+
   function buildL3() {
     var s = [stepScaleWalk()];
     pick([0, 1, 2, 3, 4, 5, 6], 3).forEach(function (i) { s.push(stepToneOrSemi(i)); });
@@ -986,9 +1122,24 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
       hint: 'La escala es Fa, Sol, La, ?, Do, Re, Mi, Fa.', wrong: 'Era Si♭',
       explain: 'En Fa mayor, el Si baja un semitono y es <b>Si♭</b>. Esa es la única alteración de la tonalidad.', sound: function () { playMidi(70); }
     }));
+    s.push(stepScaleBuild({
+      root: 69, names: ['La', 'Si', 'Do', 'Re', 'Mi', 'Fa', 'Sol', 'La'], short: 'La menor', title: 'La menor',
+      ints: [2, 1, 2, 2, 1, 2, 2], pat: ['T', 'S', 'T', 'T', 'S', 'T', 'T'],
+      lead: 'La escala <b>menor</b> tiene otro patrón: <b>T S T T S T T</b>. Empieza en <b>La</b> y usa solo teclas blancas.',
+      done: 'La menor usa las mismas teclas que Do mayor, pero empieza en La. Por eso se llaman tonalidades <b>relativas</b>.'
+    }));
+    s.push(stepChoice({
+      title: 'Tonalidades relativas', lead: '<b>La menor</b> usa exactamente las mismas notas que una tonalidad mayor. ¿Cuál?',
+      fig: function (ok) { var m = {}; if (ok !== null) [69, 71, 72, 74, 76, 77, 79, 81].forEach(function (x) { m[x] = ok ? 'ok' : 'bad'; }); return keyboardSVG({ start: 69, whites: 8, marks: m }); },
+      options: [{ k: 'C', t: 'Do mayor' }, { k: 'G', t: 'Sol mayor' }, { k: 'F', t: 'Fa mayor' }, { k: 'D', t: 'Re mayor' }], correct: 'C',
+      hint: 'La menor no lleva sostenidos ni bemoles.', wrong: 'Era Do mayor',
+      explain: '<b>Do mayor</b> tampoco lleva alteraciones: tiene las mismas siete notas y solo cambia la nota de inicio. La menor es su relativa menor.',
+      sound: function () { playSeq([60, 62, 64, 65, 67, 69, 71, 72], 280); }
+    }));
+    shuffle([false, true]).forEach(function (mn) { s.push(stepEarMM(mn)); });
     var labels = {}; C_SCALE.forEach(function (m, i) { labels[m] = C_NAMES[i]; });
-    s.push(stepSummary(4, {
-      title: 'Ya conoces las tonalidades',
+    s.push(stepSummary(6, {
+      title: 'Ya conoces las escalas mayores y menores',
       fig: keyboardSVG({ start: 60, whites: 8, labels: labels }) + '<div class="pat">' + patChips(0, -1) + '</div>',
       hint: 'Do mayor y el patrón T T S T T T S. Toca las teclas para escucharlas.',
       bindFig: function (r) { bindKeys(r, playMidi); }
@@ -1079,7 +1230,538 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     return s;
   }
 
-  var BUILD = { 1: buildL1, 2: buildBass, 3: buildL2, 4: buildL3 };
+  // ===================== RITMO: motor de notación =====================
+  var BPM = 100, BEAT = 60 / BPM;
+  var VAL = {
+    w: { es: 'Redonda', rs: 'Silencio de redonda', beats: 4, frac: '1', pl: 'redondas' },
+    h: { es: 'Blanca', rs: 'Silencio de blanca', beats: 2, frac: '1/2', pl: 'blancas' },
+    q: { es: 'Negra', rs: 'Silencio de negra', beats: 1, frac: '1/4', pl: 'negras' },
+    e: { es: 'Corchea', rs: 'Silencio de corchea', beats: 0.5, frac: '1/8', pl: 'corcheas' },
+    s: { es: 'Semicorchea', rs: 'Silencio de semicorchea', beats: 0.25, frac: '1/16', pl: 'semicorcheas' }
+  };
+  var VORDER = ['w', 'h', 'q', 'e', 's'];
+  var RY = 70, RTOP = 38;
+  function isRest(v) { return v !== '?' && v === v.toUpperCase(); }
+  function vk(v) { return v.toLowerCase(); }
+  function beatsOf(v) { return VAL[vk(v)].beats; }
+  function sumOf(pat) { return pat.reduce(function (a, v) { return a + beatsOf(v); }, 0); }
+  function fmtB(n) {
+    var w = Math.floor(n), f = n - w, fs = f === 0.5 ? '½' : f === 0.25 ? '¼' : f === 0.75 ? '¾' : '';
+    return ((w ? String(w) : '') + fs) || '0';
+  }
+  function durTxt(n) { return n === 1 ? '1 tiempo' : n === 0.5 ? 'medio tiempo' : n === 0.25 ? 'un cuarto de tiempo' : fmtB(n) + ' tiempos'; }
+  function esL(v) { return VAL[vk(v)].es.toLowerCase(); }
+
+  function flagPath(sx, ty) {
+    return '<path class="fl" d="M' + sx + ' ' + ty + ' C' + (sx + 1) + ' ' + (ty + 9) + ' ' + (sx + 13) + ' ' + (ty + 12) + ' ' + (sx + 10) + ' ' + (ty + 26) + '"/>';
+  }
+  function restGlyph(v, x, y) {
+    if (v === 'W') return '<rect class="hd" x="' + (x - 9) + '" y="' + y + '" width="18" height="7"/>';
+    if (v === 'H') return '<rect class="hd" x="' + (x - 9) + '" y="' + (y - 7) + '" width="18" height="7"/>';
+    if (v === 'Q') return '<path class="rp" d="M' + (x - 3) + ' ' + (y - 21) + ' L' + (x + 4) + ' ' + (y - 11) + ' L' + (x - 4) + ' ' + (y - 2) + ' Q' + (x + 6) + ' ' + (y - 2) + ' ' + (x + 3) + ' ' + (y + 10) + ' Q' + (x - 4) + ' ' + (y + 5) + ' ' + (x - 3) + ' ' + (y + 10) + '"/>';
+    if (v === 'E') return '<circle class="hd" cx="' + (x - 4) + '" cy="' + (y - 9) + '" r="3.6"/><path class="rp" d="M' + (x - 4) + ' ' + (y - 9) + ' Q' + (x + 2) + ' ' + (y - 9) + ' ' + (x + 5) + ' ' + (y - 18) + ' L' + (x - 3) + ' ' + (y + 12) + '"/>';
+    return '<circle class="hd" cx="' + (x - 2) + '" cy="' + (y - 15) + '" r="3.4"/><circle class="hd" cx="' + (x - 5) + '" cy="' + (y - 5) + '" r="3.4"/>' +
+      '<path class="rp" d="M' + (x - 2) + ' ' + (y - 15) + ' Q' + (x + 3) + ' ' + (y - 15) + ' ' + (x + 6) + ' ' + (y - 24) + ' L' + (x - 4) + ' ' + (y + 13) + ' M' + (x - 5) + ' ' + (y - 5) + ' Q' + (x + 1) + ' ' + (y - 5) + ' ' + (x + 3) + ' ' + (y - 13) + '"/>';
+  }
+  function rGlyph(e, i, grouped, topY) {
+    var x = e.x, y = RY, v = e.v, rest = isRest(v), g;
+    g = '<g class="rn ' + (e.state || '') + (e.tap ? ' tap' : '') + '" data-i="' + i + '"' +
+      (e.tap ? ' role="button" tabindex="0" aria-label="' + (e.aria || (rest ? VAL[vk(v)].rs : VAL[v].es)) + '"' : '') + '>';
+    if (e.tap) g += '<circle class="hit" cx="' + x + '" cy="' + (y - 8) + '" r="22"/>';
+    if (rest) return g + restGlyph(v, x, y) + '</g>';
+    if (v === 'w') g += '<ellipse class="hd" cx="' + x + '" cy="' + y + '" rx="9.6" ry="6.6"/><ellipse class="hole" cx="' + x + '" cy="' + y + '" rx="4" ry="5.6" transform="rotate(-50 ' + x + ' ' + y + ')"/>';
+    else g += '<ellipse class="' + (v === 'h' ? 'op' : 'hd') + '" cx="' + x + '" cy="' + y + '" rx="7.6" ry="5.3" transform="rotate(-22 ' + x + ' ' + y + ')"/>';
+    if (v !== 'w') {
+      var sx = x + 6.8, ty = grouped ? topY : y - (v === 's' ? 44 : RTOP);
+      g += '<line class="st" x1="' + sx + '" y1="' + (y - 2) + '" x2="' + sx + '" y2="' + ty + '"/>';
+      if (!grouped && v === 'e') g += flagPath(sx, ty);
+      if (!grouped && v === 's') g += flagPath(sx, ty) + flagPath(sx, ty + 9);
+    }
+    return g + '</g>';
+  }
+  function layoutR(evs, x0, px) {
+    var t = 0;
+    evs.forEach(function (e) {
+      var d = beatsOf(e.v === '?' ? e.hv : e.v);
+      e.d = d; e.t0 = t; e.x = e.fx !== undefined ? e.fx : x0 + t * px + 9; t += d;
+    });
+    return t;
+  }
+  function beamGroups(evs) {
+    var gs = [], cur = null;
+    evs.forEach(function (e, i) {
+      var short = e.v !== '?' && !isRest(e.v) && e.d < 1;
+      if (!short) { cur = null; return; }
+      var beat = Math.floor(e.t0 + 1e-6);
+      if (cur && cur.beat === beat && cur.last === i - 1) { cur.idx.push(i); cur.last = i; if (e.v === 's') cur.hasS = true; }
+      else { cur = { beat: beat, idx: [i], last: i, hasS: e.v === 's' }; gs.push(cur); }
+    });
+    return gs;
+  }
+  function beamSVG(evs, gp) {
+    var top = RY - (gp.hasS ? 44 : RTOP), a = evs[gp.idx[0]], z = evs[gp.idx[gp.idx.length - 1]];
+    var s = '<g class="rn ' + (a.state || '') + '"><line class="bm" x1="' + (a.x + 5.9) + '" x2="' + (z.x + 7.7) + '" y1="' + (top + 2.5) + '" y2="' + (top + 2.5) + '" stroke-width="5"/>';
+    var run = [];
+    function flush() {
+      if (!run.length) return;
+      var y2 = top + 11.5;
+      if (run.length > 1) s += '<line class="bm" x1="' + (evs[run[0]].x + 5.9) + '" x2="' + (evs[run[run.length - 1]].x + 7.7) + '" y1="' + y2 + '" y2="' + y2 + '" stroke-width="4.2"/>';
+      else { var ex = evs[run[0]].x + 6.8, first = gp.idx[0] === run[0]; s += '<line class="bm" x1="' + ex + '" x2="' + (first ? ex + 9 : ex - 9) + '" y1="' + y2 + '" y2="' + y2 + '" stroke-width="4.2"/>'; }
+      run = [];
+    }
+    gp.idx.forEach(function (k) { if (evs[k].v === 's') run.push(k); else flush(); });
+    flush();
+    return s + '</g>';
+  }
+  // o: events, ts ('4/4' | true), nbeats, bars, counts, beatOn, nobeam, extra, px, x0, label
+  function rhythmSVG(o) {
+    var evs = o.events, tsS = o.ts === true ? '4/4' : o.ts, nb = o.nbeats || 4;
+    var x0 = o.x0 !== undefined ? o.x0 : (o.ts ? 56 : 26), px = o.px || 72;
+    layoutR(evs, x0, px);
+    var s = '<svg class="rs" viewBox="' + (o.vb || '0 0 360 120') + '" role="img" aria-label="' + (o.label || 'Ritmo') + '">';
+    var xl = x0 - 8, xr = x0 + nb * px + 3;
+    s += '<line class="rline" x1="8" x2="' + (o.bars ? xr : 352) + '" y1="70" y2="70"/>';
+    if (o.bars) {
+      s += '<line class="rbar" x1="' + xl + '" x2="' + xl + '" y1="54" y2="86"/><line class="rbar thick" x1="' + xr + '" x2="' + xr + '" y1="54" y2="86"/>';
+      if (tsS) { var pp = String(tsS).split('/'), cx = 8 + (xl - 8) / 2; s += '<text class="ts" x="' + cx + '" y="66">' + pp[0] + '</text><text class="ts" x="' + cx + '" y="91">' + pp[1] + '</text>'; }
+    }
+    if (o.counts) for (var b = 0; b < nb; b++) s += '<text class="cnt' + (o.beatOn === b ? ' on' : '') + '" x="' + (x0 + b * px + 9) + '" y="110">' + (b + 1) + '</text>';
+    if (o.extra) s += o.extra;
+    var groups = o.nobeam ? [] : beamGroups(evs), inG = {};
+    groups.forEach(function (gp) { if (gp.idx.length > 1) gp.idx.forEach(function (k) { inG[k] = gp; }); });
+    evs.forEach(function (e, i) {
+      if (e.v === '?') {
+        var w = Math.max(30, e.d * px - 12);
+        s += '<rect class="ph" x="' + (e.x - w / 2 + 3) + '" y="34" width="' + w + '" height="50" rx="7"/><text class="phq" x="' + (e.x + 3) + '" y="66">?</text>';
+        return;
+      }
+      var gp = inG[i];
+      s += rGlyph(e, i, !!gp, gp ? RY - (gp.hasS ? 44 : RTOP) : 0);
+      if (e.label) s += '<text class="lbl" x="' + e.x + '" y="108" text-anchor="middle" style="font-size:12px">' + e.label + '</text>';
+    });
+    groups.forEach(function (gp) { if (gp.idx.length > 1) s += beamSVG(evs, gp); });
+    return s + '</svg>';
+  }
+  function miniNote(v) { return '<svg class="mini" viewBox="0 24 36 56" aria-hidden="true">' + rGlyph({ v: v, x: 12 }, 0, false, 0) + '</svg>'; }
+  function beatBoxes(cx, beats) {
+    var s = '', w = 9, gap = 2, bx = cx - (4 * w + 3 * gap) / 2;
+    for (var b = 0; b < 4; b++) {
+      var fill = Math.max(0, Math.min(1, beats - b)), xx = bx + b * (w + gap);
+      s += '<rect class="bx" x="' + xx + '" y="82" width="' + w + '" height="7" rx="2"/>';
+      if (fill > 0) s += '<rect class="bx on" x="' + xx + '" y="82" width="' + (w * fill) + '" height="7" rx="2"/>';
+    }
+    return s;
+  }
+  function bindR(root, fn) {
+    [].forEach.call(root.querySelectorAll('svg'), function (svg, k) {
+      svg.addEventListener('click', function (e) {
+        var g = e.target.closest ? e.target.closest('.rn.tap') : null; if (g) fn(+g.getAttribute('data-i'), k);
+      });
+      svg.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        var g = e.target.closest ? e.target.closest('.rn.tap') : null; if (g) { e.preventDefault(); fn(+g.getAttribute('data-i'), k); }
+      });
+    });
+  }
+  // Reproduce un compás: cuenta de 4 clics opcional, notas y clics sobre el compás.
+  function runPattern(pat, o) {
+    clearTimers();
+    var ms = BEAT * 1000, off = o.count ? 4 : 0, t = 0, i;
+    if (o.count) for (i = 0; i < 4; i++) (function (i) { timers.push(setTimeout(function () { playClick(i === 0); if (o.onTick) o.onTick(i); }, i * ms)); })(i);
+    pat.forEach(function (v, k) {
+      var d = beatsOf(v);
+      if (!isRest(v) && o.sound !== false) (function (k, d) { timers.push(setTimeout(function () { playNote(67, Math.max(0.1, d * BEAT * 0.92)); if (o.onNote) o.onNote(k); }, (off + t) * ms)); })(k, d);
+      t += d;
+    });
+    if (o.clicks) for (i = 0; i < 4; i++) (function (b) { timers.push(setTimeout(function () { playClick(b === 0); if (o.onBeat) o.onBeat(b); }, (off + b) * ms)); })(i);
+    timers.push(setTimeout(function () { if (o.done) o.done(); }, (off + (o.beats || 4)) * ms + 350));
+  }
+
+  // ---------- Figuras de resumen ----------
+  var VXS = [44, 108, 176, 244, 314];
+  function valuesFigure(seen, cur, rest) {
+    var extra = '', evs = VORDER.map(function (v, i) {
+      if (seen[i]) extra += beatBoxes(VXS[i], VAL[v].beats);
+      return { v: rest ? v.toUpperCase() : v, fx: VXS[i], tap: true, state: i === cur ? 'active' : '', label: seen[i] ? VAL[v].es : '',
+        aria: (rest ? VAL[v].rs : VAL[v].es) + ', ' + durTxt(VAL[v].beats) };
+    });
+    return rhythmSVG({ events: evs, nobeam: true, extra: extra, label: rest ? 'Los cinco silencios' : 'Las cinco figuras: redonda, blanca, negra, corchea y semicorchea' });
+  }
+  var NOTE_TXT = {
+    w: 'Dura 4 tiempos y es la unidad entera. Se escribe con la cabeza vacía y sin plica.',
+    h: 'Vale la mitad de la unidad y dura 2 tiempos. Cabeza vacía con plica.',
+    q: 'Vale 1/4 de la unidad y dura 1 tiempo. Cabeza rellena con plica. En 4/4 marca el pulso.',
+    e: 'Vale 1/8 de la unidad y dura medio tiempo. Lleva un corchete, o una barra cuando se une a otras.',
+    s: 'Vale 1/16 de la unidad y dura un cuarto de tiempo. Lleva dos corchetes, o dos barras.'
+  };
+  var REST_TXT = {
+    w: 'Son 4 tiempos sin sonar. Es un rectángulo que cuelga de la línea.',
+    h: 'Son 2 tiempos sin sonar. Es un rectángulo que se apoya sobre la línea.',
+    q: 'Es 1 tiempo sin sonar. Se dibuja como un zigzag.',
+    e: 'Es medio tiempo sin sonar. Una raya inclinada con un punto.',
+    s: 'Es un cuarto de tiempo sin sonar. Una raya inclinada con dos puntos.'
+  };
+
+  // ---------- Pasos de la lección 3 ----------
+  function stepFigExplore(rest) {
+    return function () {
+      stageEl.innerHTML = rest
+        ? head('Paso 3', 'Los silencios', 'Música es también pausa. Cada figura tiene su <b>silencio</b>, que dura lo mismo pero no suena. Toca cada uno.') + figHTML()
+        : head('Paso 1', 'Cinco figuras, cinco duraciones', 'La <b>redonda</b> es la <b>unidad</b>: la figura más larga de uso común. Las demás son fracciones de ella. Toca cada figura para ver su nombre y oír cuánto dura.') + figHTML();
+      var fig = $('fig'), seen = {}, n = 0, cur = -1;
+      function draw() { fig.innerHTML = valuesFigure(seen, cur, rest); bindR(fig, tap); }
+      function tap(i) {
+        var v = VORDER[i];
+        cur = i; if (!seen[i]) { seen[i] = 1; n++; }
+        if (!rest) playNote(67, VAL[v].beats * BEAT * 0.97);
+        draw();
+        var ttl = (rest ? VAL[v].rs : VAL[v].es + (v === 'w' ? ' (la unidad)' : ' (' + VAL[v].frac + ')')), txt = (rest ? REST_TXT : NOTE_TXT)[v];
+        if (n === 5) { setFb('ok', ttl, txt + (rest ? ' Recuerda: la redonda cuelga y la blanca se apoya.' : ' Ya conoces las cinco.')); unlock(); }
+        else setFb('info', ttl, txt + ' Faltan ' + (5 - n) + '.');
+      }
+      draw(); setFb('info', 'Toca cada una', rest ? 'Los silencios no suenan, pero se cuentan igual.' : 'Fíjate cómo crece la duración: cada figura vale la mitad que la anterior.');
+    };
+  }
+
+  function ladderSVG(a) {
+    var s = '<svg class="rs" viewBox="0 0 360 158" role="group" aria-label="Cada figura dividida en partes iguales de una redonda">';
+    VORDER.forEach(function (v, r) {
+      var n = Math.round(4 / VAL[v].beats), y = 6 + r * 30, X0 = 104, W = 248, gap = n > 1 ? 2 : 0, w = (W - (n - 1) * gap) / n;
+      s += '<g class="row" data-r="' + r + '" role="button" tabindex="0" aria-label="Escuchar ' + n + ' ' + (n === 1 ? 'redonda' : VAL[v].pl) + '">' +
+        '<rect x="0" y="' + (y - 3) + '" width="360" height="28" fill="transparent"/><text class="lbl" x="8" y="' + (y + 16) + '">' + VAL[v].es + '</text>';
+      for (var k = 0; k < n; k++) {
+        var cls = 'seg';
+        if (a && a.row === r) cls += a.seg === k ? ' now' : a.seg > k ? ' on' : '';
+        s += '<rect class="' + cls + '" x="' + (X0 + k * (w + gap)) + '" y="' + y + '" width="' + w + '" height="22" rx="3"/>';
+      }
+      s += '</g>';
+    });
+    return s + '</svg>';
+  }
+  function stepEquiv() {
+    return function () {
+      stageEl.innerHTML = head('Paso 2', 'Cada figura divide a la anterior', 'Una redonda se puede partir en 2 blancas, 4 negras, 8 corcheas o 16 semicorcheas. El total siempre dura lo mismo. Toca una fila para escucharla.') + figBox('fig') + fbBox();
+      var fig = $('fig'), seen = {}, n = 0;
+      fig.innerHTML = ladderSVG(null);
+      function playRow(r) {
+        clearTimers();
+        var v = VORDER[r], cnt = Math.round(4 / VAL[v].beats), dt = VAL[v].beats * BEAT * 1000;
+        for (var k = 0; k < cnt; k++) (function (k) { timers.push(setTimeout(function () { playNote(67, VAL[v].beats * BEAT * 0.9); fig.innerHTML = ladderSVG({ row: r, seg: k }); }, k * dt)); })(k);
+        timers.push(setTimeout(function () { fig.innerHTML = ladderSVG({ row: r, seg: cnt }); }, cnt * dt));
+        if (!seen[r]) { seen[r] = 1; n++; }
+        var txt = r === 0 ? 'La redonda es la unidad entera: una sola nota de 4 tiempos.' : 'Caben ' + cnt + ' ' + VAL[v].pl + ' en una redonda. Cada una dura ' + durTxt(VAL[v].beats) + '.';
+        if (n >= 3) { setFb('ok', VAL[v].es, txt + ' Todas las filas duran lo mismo en total.'); unlock(); }
+        else setFb('info', VAL[v].es, txt + ' Prueba otras filas.');
+      }
+      fig.addEventListener('click', function (e) { var g = e.target.closest ? e.target.closest('.row') : null; if (g) playRow(+g.getAttribute('data-r')); });
+      fig.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        var g = e.target.closest ? e.target.closest('.row') : null; if (g) { e.preventDefault(); playRow(+g.getAttribute('data-r')); }
+      });
+      setFb('info', 'Toca una fila', 'Cada fila toca lo mismo en total: 4 tiempos.');
+    };
+  }
+
+  function singleEv(v, state, label) { return [{ v: v, fx: 180, state: state, label: label }]; }
+  function stepBeatsQ(v) {
+    var b = VAL[v].beats, pool = [4, 2, 1, 0.5, 0.25];
+    var opts = pick(pool.filter(function (x) { return x !== b; }), 3).concat([b]).sort(function (x, y) { return y - x; });
+    return stepChoice({
+      title: '¿Cuánto dura?', lead: 'En 4/4, la <b>negra</b> dura 1 tiempo. ¿Cuánto dura esta figura?',
+      fig: function (ok) { return rhythmSVG({ events: singleEv(v, ok === null ? '' : ok ? 'ok' : 'bad', ok === null ? '' : VAL[v].es), nobeam: true, label: 'Una figura musical' }); },
+      options: opts.map(function (x) { return { k: x, t: fmtB(x), s: x === 1 ? 'tiempo' : x < 1 ? 'de tiempo' : 'tiempos' }; }), correct: b,
+      hint: 'Piensa en cuántas negras caben en ella.', wrong: 'Dura ' + durTxt(b),
+      explain: 'La <b>' + VAL[v].es.toLowerCase() + '</b> dura <b>' + durTxt(b) + '</b> y vale ' + VAL[v].frac + ' de la unidad.',
+      sound: function () { playNote(67, b * BEAT * 0.97); }
+    });
+  }
+  function stepNameQ(v) {
+    var opts = pick(VORDER.filter(function (x) { return x !== v; }), 3).concat([v]);
+    opts.sort(function (a, b) { return VORDER.indexOf(a) - VORDER.indexOf(b); });
+    return stepChoice({
+      title: '¿Cómo se llama?', lead: 'Fíjate en la cabeza, la plica y los corchetes o barras.',
+      fig: function (ok) { return rhythmSVG({ events: singleEv(v, ok === null ? '' : ok ? 'ok' : 'bad', ok === null ? '' : VAL[v].es), nobeam: true, label: 'Una figura musical' }); },
+      options: opts.map(function (x) { return { k: x, t: VAL[x].es }; }), correct: v,
+      hint: 'Cabeza vacía o rellena, con o sin plica, con cuántos corchetes.', wrong: 'Era ' + VAL[v].es.toLowerCase(),
+      explain: NOTE_TXT[v], sound: function () { playNote(67, VAL[v].beats * BEAT * 0.97); }
+    });
+  }
+  function stepRestQ(v) {
+    var opts = pick(VORDER.filter(function (x) { return x !== v; }), 3).concat([v]);
+    opts.sort(function (a, b) { return VORDER.indexOf(a) - VORDER.indexOf(b); });
+    var R = v.toUpperCase();
+    return stepChoice({
+      title: '¿De qué figura es este silencio?', lead: 'Cada silencio dura lo mismo que su figura.',
+      fig: function (ok) { return rhythmSVG({ events: singleEv(R, ok === null ? '' : ok ? 'ok' : 'bad', ok === null ? '' : VAL[v].rs), nobeam: true, label: 'Un silencio' }); },
+      options: opts.map(function (x) { return { k: x, t: VAL[x].es }; }), correct: v,
+      hint: 'La redonda cuelga, la blanca se apoya, la negra es un zigzag.', wrong: 'Era ' + VAL[v].rs.toLowerCase(),
+      explain: VAL[v].rs + ' (' + durTxt(VAL[v].beats) + '). ' + REST_TXT[v]
+    });
+  }
+
+  function stepSumQ(pat, lead) {
+    var tot = sumOf(pat), cand = [tot - 1.5, tot - 1, tot - 0.5, tot + 0.5, tot + 1, tot + 1.5].filter(function (x) { return x > 0; });
+    var opts = pick(cand, 3).concat([tot]).sort(function (a, b) { return a - b; });
+    var parts = pat.map(function (v) { return (isRest(v) ? 'silencio de ' : '') + esL(v) + ' (' + fmtB(beatsOf(v)) + ')'; }).join(' + ');
+    return stepChoice({
+      title: '¿Cuántos tiempos suma?', lead: lead || 'Suma la duración de todas las figuras de esta fila.',
+      fig: function (ok) { return rhythmSVG({ events: pat.map(function (v) { return { v: v, state: ok === null ? '' : ok ? 'ok' : 'bad' }; }), px: Math.min(72, 300 / tot), x0: 26, label: 'Figuras y silencios seguidos' }); },
+      options: opts.map(function (x) { return { k: x, t: fmtB(x), s: 'tiempos' }; }), correct: tot,
+      hint: 'Los silencios cuentan igual que las figuras.', wrong: 'Suman ' + fmtB(tot),
+      explain: parts + ' = <b>' + fmtB(tot) + ' tiempos</b>.',
+      sound: function () { runPattern(pat, { beats: tot, done: null }); }
+    });
+  }
+  var SUMR = [['h', 'Q'], ['q', 'E', 'e', 'q'], ['H', 'q', 'q'], ['q', 'q', 'Q', 'e'], ['e', 'E', 'q', 'h'], ['h', 'H', 'Q'], ['q', 'e', 'E', 'e', 'e'], ['w', 'Q']];
+
+  // ---------- Lección 3 ----------
+  function buildValues() {
+    var s = [stepFigExplore(false), stepEquiv()];
+    pick(VORDER, 3).forEach(function (v) { s.push(stepBeatsQ(v)); });
+    pick(VORDER, 3).forEach(function (v) { s.push(stepNameQ(v)); });
+    s.push(stepFigExplore(true));
+    pick(VORDER, 3).forEach(function (v) { s.push(stepRestQ(v)); });
+    pick(SUMR, 2).forEach(function (p) { s.push(stepSumQ(p, 'Los silencios también ocupan tiempo. Suma figuras y silencios de esta fila.')); });
+    var all = { 0: 1, 1: 1, 2: 1, 3: 1, 4: 1 };
+    s.push(stepSummary(3, {
+      title: 'Ya lees duraciones y silencios',
+      fig: valuesFigure(all, -1, false) + valuesFigure(all, -1, true),
+      hint: 'Arriba, las figuras; abajo, sus silencios. Toca una figura para oír su duración.',
+      bindFig: function (r) { bindR(r, function (i, k) { if (k === 0) playNote(67, VAL[VORDER[i]].beats * BEAT * 0.97); }); }
+    }));
+    return s;
+  }
+
+  // ===================== LECCIÓN 4: TIEMPOS Y COMPASES =====================
+  function pulseSVG(on) {
+    var s = '<svg class="rs" viewBox="0 0 360 80" role="img" aria-label="Cuatro tiempos de pulso">';
+    for (var i = 0; i < 4; i++) s += '<circle class="pdot' + (i === on ? ' on' : '') + '" cx="' + (60 + i * 80) + '" cy="40" r="' + (i === on ? 22 : 16) + '"/>';
+    return s + '</svg>';
+  }
+  function stepPulse() {
+    return function () {
+      var T = [{ n: 'Lento', b: 60, d: '60 BPM: un tiempo por segundo. Se siente calmado.' }, { n: 'Moderado', b: 100, d: '100 BPM: un paso tranquilo al caminar.' }, { n: 'Rápido', b: 140, d: '140 BPM: enérgico. Es el mismo pulso, pero más veloz.' }];
+      stageEl.innerHTML = head('Paso 1', 'El pulso y el tempo', 'El <b>pulso</b> es el latido constante de la música, como el de un reloj. Cada latido es un <b>tiempo</b>. Su velocidad se llama <b>tempo</b> y se mide en tiempos por minuto (BPM).') +
+        figBox('fig') + '<div class="chips" id="chips">' + T.map(function (t, i) { return '<button class="chip" data-i="' + i + '">▶ ' + t.n + ' · ' + t.b + '</button>'; }).join('') + '</div>' + fbBox();
+      var fig = $('fig'), seen = {}, n = 0, playing = false;
+      fig.innerHTML = pulseSVG(-1);
+      setFb('info', 'Escucha tres velocidades', 'Pulsa cada una. Los círculos se iluminan con cada tiempo.');
+      $('chips').addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.chip') : null; if (!b || playing) return;
+        var i = +b.getAttribute('data-i'), ms = 60000 / T[i].b;
+        playing = true; clearTimers();
+        for (var k = 0; k < 4; k++) (function (k) { timers.push(setTimeout(function () { playClick(k === 0); fig.innerHTML = pulseSVG(k); }, k * ms)); })(k);
+        timers.push(setTimeout(function () {
+          fig.innerHTML = pulseSVG(-1); playing = false;
+          if (!seen[i]) { seen[i] = 1; n++; b.classList.add('seen'); }
+          if (n === 3) { setFb('ok', T[i].n, T[i].d + ' Ya conoces el pulso.'); unlock(); } else setFb('info', T[i].n, T[i].d + ' Faltan ' + (3 - n) + '.');
+        }, 4 * ms));
+      });
+    };
+  }
+
+  var METERS = [
+    { nb: 2, t: '2/4', d: 'Dos tiempos por compás: fuerte, débil. Es el compás de marchas y polcas.' },
+    { nb: 3, t: '3/4', d: 'Tres tiempos por compás: fuerte, débil, débil. Es el compás del vals.' },
+    { nb: 4, t: '4/4', d: 'Cuatro tiempos por compás. Es el más usado en la música popular.' }
+  ];
+  function stepMeters() {
+    return function () {
+      stageEl.innerHTML = head('Paso 2', 'El compás', 'Las figuras se agrupan en <b>compases</b>, separados por líneas verticales. La cifra tiene dos números: el de arriba dice cuántos tiempos hay en cada compás; el de abajo, qué figura vale un tiempo (4 = negra). Elige cada compás.') +
+        '<div class="chips" id="chips"></div>' + figBox('fig') + '<div class="tools"><button class="btn ghost" id="hearM">▶ Escuchar dos compases</button></div>' + fbBox();
+      var sel = 2, seen = { 2: 1 }, n = 1, on = -1, playing = false, btn = $('hearM');
+      function drawFig() {
+        var m = METERS[sel], evs = []; for (var k = 0; k < m.nb; k++) evs.push({ v: 'q' });
+        $('fig').innerHTML = rhythmSVG({ events: evs, ts: m.t, nbeats: m.nb, bars: true, counts: true, beatOn: on, label: 'Un compás de ' + m.t });
+      }
+      function drawAll() {
+        $('chips').innerHTML = METERS.map(function (m, i) { return '<button class="chip' + (seen[i] ? ' seen' : '') + '" data-i="' + i + '" aria-pressed="' + (i === sel) + '">' + m.t + '</button>'; }).join('');
+        drawFig();
+        var m = METERS[sel];
+        if (n === 3) { setFb('ok', m.t, m.d + ' Ya viste los tres compases.'); unlock(); } else setFb('info', m.t, m.d + ' Faltan ' + (3 - n) + ' por ver.');
+      }
+      $('chips').addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.chip') : null; if (!b || playing) return;
+        sel = +b.getAttribute('data-i'); if (!seen[sel]) { seen[sel] = 1; n++; }
+        drawAll();
+      });
+      btn.addEventListener('click', function () {
+        if (playing) return; playing = true; btn.disabled = true; clearTimers();
+        var nb = METERS[sel].nb;
+        for (var i = 0; i < nb * 2; i++) (function (i) { timers.push(setTimeout(function () { playClick(i % nb === 0); on = i % nb; drawFig(); }, i * BEAT * 1000)); })(i);
+        timers.push(setTimeout(function () { on = -1; drawFig(); playing = false; btn.disabled = false; }, nb * 2 * BEAT * 1000 + 100));
+      });
+      drawAll();
+    };
+  }
+
+  function stepFillQ(pat, hi, nb) {
+    var ans = pat[hi], ts = nb + '/4', rest = sumOf(pat) - beatsOf(ans);
+    var opts = pick(VORDER.filter(function (x) { return x !== ans; }), 3).concat([ans]);
+    opts.sort(function (a, b) { return VORDER.indexOf(a) - VORDER.indexOf(b); });
+    return stepChoice({
+      title: '¿Qué figura falta?', lead: 'A este compás de <b>' + ts + '</b> le falta una figura. Calcula los tiempos que faltan y elige la que completa.',
+      fig: function (ok) {
+        var evs = pat.map(function (v, i) { if (i !== hi) return { v: v }; return ok === null ? { v: '?', hv: ans } : { v: ans, state: ok ? 'ok' : 'bad' }; });
+        return rhythmSVG({ events: evs, ts: ts, nbeats: nb, bars: true, label: 'Compás de ' + ts + ' incompleto' });
+      },
+      options: opts.map(function (x) { return { k: x, t: VAL[x].es }; }), correct: ans,
+      hint: 'Tiempos que faltan = ' + nb + ' menos los tiempos que ya hay.', wrong: 'Era ' + VAL[ans].es.toLowerCase(),
+      explain: 'Las demás figuras suman ' + fmtB(rest) + '. En ' + ts + ' faltan ' + durTxt(beatsOf(ans)) + ': una <b>' + VAL[ans].es.toLowerCase() + '</b>.',
+      sound: function () { runPattern(pat, { beats: nb }); }
+    });
+  }
+  var FILL = { 4: [['q', 'q', 'h'], ['h', 'q', 'q'], ['q', 'q', 'e', 'e', 'q'], ['e', 'e', 'e', 'e', 'h'], ['q', 'e', 'e', 'q', 'q'], ['s', 's', 's', 's', 'q', 'h']],
+               3: [['h', 'q'], ['q', 'h'], ['q', 'q', 'q'], ['q', 'e', 'e', 'q']], 2: [['q', 'q'], ['e', 'e', 'q'], ['q', 'e', 'e'], ['s', 's', 'e', 'q']] };
+  function fillFor(nb) { var p = pick(FILL[nb], 1)[0]; return stepFillQ(p, Math.floor(Math.random() * p.length), nb); }
+
+  function stepMeterEar(nb) {
+    return function () {
+      stageEl.innerHTML = head('Escucha', '¿Qué compás es?', 'Pulsa ▶: oirás clics con un acento al comenzar cada compás. Cuenta cuántos tiempos hay entre un acento y el siguiente.') +
+        '<div class="tools"><button class="btn ghost" id="hearE">▶ Escuchar</button></div>' +
+        '<div class="opts" id="opts" style="grid-template-columns:repeat(3,minmax(0,1fr))">' + METERS.map(function (m) { return '<button class="opt" data-k="' + m.nb + '" disabled>' + m.t + '</button>'; }).join('') + '</div>' + fbBox();
+      var opts = $('opts'), btn = $('hearE'), answered = false;
+      setFb('info', 'Primero escucha', 'El primer clic de cada compás suena más agudo.');
+      btn.addEventListener('click', function () {
+        btn.disabled = true; btn.textContent = '↻ Escuchar otra vez';
+        if (!answered) [].forEach.call(opts.children, function (x) { x.disabled = false; });
+        clearTimers();
+        for (var i = 0; i < nb * 3; i++) (function (i) { timers.push(setTimeout(function () { playClick(i % nb === 0); }, i * BEAT * 1000)); })(i);
+        timers.push(setTimeout(function () { btn.disabled = false; }, nb * 3 * BEAT * 1000 + 100));
+      });
+      opts.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.opt') : null; if (!b || b.disabled || answered) return;
+        answered = true; var ok = +b.getAttribute('data-k') === nb; results.push(ok);
+        [].forEach.call(opts.children, function (x) { x.disabled = true; if (+x.getAttribute('data-k') === nb) x.classList.add('ok'); else if (x === b) x.classList.add('bad'); else x.classList.add('dim'); });
+        setFb(ok ? 'ok' : 'bad', ok ? '¡Correcto!' : 'Era ' + nb + '/4', 'Entre un acento y el siguiente hay ' + nb + ' tiempos: es un compás de <b>' + nb + '/4</b>.');
+        unlock();
+      });
+    };
+  }
+
+  function stepBuild(t) {
+    var nb = t.nb || 4, ts = nb + '/4';
+    return function () {
+      stageEl.innerHTML = head(t.kicker, t.title, t.lead) + '<div class="pal" id="pal"></div>' + figBox('fig') +
+        '<div class="tools"><button class="btn ghost" id="undo">Borrar última</button><button class="btn ghost" id="clr">Empezar de nuevo</button></div>' + fbBox();
+      var evs = [], over = 0, fin = false, fig = $('fig'), pal = $('pal');
+      pal.innerHTML = VORDER.map(function (v) { return '<button class="vbtn" data-v="' + v + '" aria-label="' + VAL[v].es + '">' + miniNote(v) + '<span>' + VAL[v].es + '</span></button>'; }).join('');
+      function total() { return sumOf(evs); }
+      function draw() {
+        fig.innerHTML = rhythmSVG({ events: evs.map(function (v) { return { v: v, state: fin ? 'ok' : '' }; }), ts: ts, nbeats: nb, bars: true, counts: true, label: 'Tu compás de ' + ts });
+      }
+      function status() {
+        var tt = total();
+        if (tt === nb) {
+          if (t.check(evs)) { fin = true; draw(); results.push(over === 0); [].forEach.call(pal.children, function (b) { b.disabled = true; }); setFb('ok', '¡Compás completo!', t.ok); unlock(); }
+          else setFb('info', 'Suma ' + nb + ', pero falta algo', t.missing);
+        } else setFb('info', 'Llevas ' + fmtB(tt) + ' de ' + nb + ' tiempos', 'Faltan ' + durTxt(nb - tt) + '.');
+      }
+      pal.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.vbtn') : null; if (!b || fin) return;
+        var v = b.getAttribute('data-v'), left = nb - total();
+        if (VAL[v].beats > left) { over++; setFb('bad', 'No cabe', 'La ' + VAL[v].es.toLowerCase() + ' dura ' + durTxt(VAL[v].beats) + ' y solo quedan ' + durTxt(left) + '.'); return; }
+        evs.push(v); playNote(67, Math.min(0.6, VAL[v].beats * BEAT)); draw(); status();
+      });
+      $('undo').addEventListener('click', function () { if (fin || !evs.length) return; evs.pop(); draw(); status(); });
+      $('clr').addEventListener('click', function () { if (fin) return; evs = []; draw(); status(); });
+      draw(); setFb('info', 'Llevas 0 de ' + nb + ' tiempos', 'Toca una figura para añadirla al compás.');
+    };
+  }
+  function distinct(a) { var m = {}, n = 0; a.forEach(function (v) { if (!m[v]) { m[v] = 1; n++; } }); return n; }
+  function countOf(a, v) { return a.filter(function (x) { return x === v; }).length; }
+
+  var HEARP = [['h', 'h'], ['h', 'q', 'q'], ['q', 'q', 'h'], ['q', 'h', 'q'], ['q', 'q', 'q', 'q'], ['e', 'e', 'q', 'h'], ['q', 'q', 'e', 'e', 'q'], ['q', 'e', 'e', 'q', 'q'], ['e', 'e', 'q', 'e', 'e', 'q'], ['s', 's', 's', 's', 'q', 'h'], ['q', 's', 's', 's', 's', 'q', 'q']];
+  function stepHear() {
+    var chosen = [], used = {}, LET = ['A', 'B', 'C', 'D'];
+    shuffle(HEARP).forEach(function (p) { if (chosen.length < 4 && !used[p.length]) { used[p.length] = 1; chosen.push(p); } });
+    var ans = Math.floor(Math.random() * 4), target = chosen[ans];
+    return function () {
+      stageEl.innerHTML = head('Escucha', '¿Qué ritmo es?', 'Pulsa ▶: oirás 4 clics de cuenta y luego un compás de 4/4. Elige el ritmo que suena.') +
+        '<div class="tools"><button class="btn ghost" id="hearR">▶ Escuchar</button></div>' +
+        '<div class="opts" id="opts" style="grid-template-columns:1fr">' + chosen.map(function (p, i) {
+          return '<button class="opt rh" data-k="' + i + '" disabled aria-label="Ritmo ' + LET[i] + '"><small>' + LET[i] + '</small>' +
+            rhythmSVG({ events: p.map(function (v) { return { v: v }; }), bars: true, px: 74, vb: '0 20 360 72', label: 'Ritmo ' + LET[i] }) + '</button>'; }).join('') + '</div>' + fbBox();
+      var opts = $('opts'), btn = $('hearR'), answered = false;
+      setFb('info', 'Primero escucha', 'Puedes repetirlo las veces que quieras.');
+      btn.addEventListener('click', function () {
+        btn.disabled = true; btn.textContent = '↻ Escuchar otra vez';
+        if (!answered) [].forEach.call(opts.children, function (x) { x.disabled = false; });
+        runPattern(target, { count: true, onTick: function (i) { setFb('info', 'Cuenta', (i + 1) + '…'); }, done: function () { btn.disabled = false; setFb('info', 'Elige el ritmo', 'Compara con lo que oíste.'); } });
+      });
+      opts.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.opt') : null; if (!b || b.disabled || answered) return;
+        answered = true; var ok = +b.getAttribute('data-k') === ans; results.push(ok);
+        [].forEach.call(opts.children, function (x) { x.disabled = true; if (+x.getAttribute('data-k') === ans) x.classList.add('ok'); else if (x === b) x.classList.add('bad'); else x.classList.add('dim'); });
+        setFb(ok ? 'ok' : 'bad', ok ? '¡Correcto!' : 'Era el ritmo ' + LET[ans], 'Sonó: ' + target.map(esL).join(', ') + '.');
+        unlock();
+      });
+    };
+  }
+
+  function stepTap(pat) {
+    return function () {
+      stageEl.innerHTML = head('Ritmo en vivo', 'Toca el ritmo', 'Oirás 4 clics de cuenta y después un compás con clics. Toca el botón grande (o la barra espaciadora) justo cuando llegue cada figura. No cuenta para tu puntaje.') +
+        figBox('fig') + '<div class="tools"><button class="btn" id="go">▶ Empezar</button></div><button class="pad" id="pad" disabled aria-label="Toca aquí al ritmo">TOCA</button>' + fbBox();
+      var fig = $('fig'), pad = $('pad'), go = $('go'), run = false, t0 = 0, taps = [], on = -1, st = {}, ms = BEAT * 1000;
+      function draw() { fig.innerHTML = rhythmSVG({ events: pat.map(function (v, i) { return { v: v, state: st[i] || '' }; }), ts: '4/4', bars: true, counts: true, beatOn: on, label: 'Ritmo para tocar' }); }
+      function tap() { if (!run) return; taps.push(performance.now()); playNote(72, 0.15); }
+      pad.addEventListener('pointerdown', function (e) { e.preventDefault(); tap(); });
+      pad.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); tap(); } });
+      function finish() {
+        run = false; pad.disabled = true; on = -1;
+        var tt = 0, used = {}, hits = 0;
+        pat.forEach(function (v, j) {
+          var exp = t0 + (4 + tt) * ms, best = -1, bd = 1e9;
+          tt += beatsOf(v);
+          if (isRest(v)) return;
+          taps.forEach(function (x, k) { var d = Math.abs(x - exp); if (!used[k] && d < bd) { bd = d; best = k; } });
+          if (best >= 0 && bd <= 170) { used[best] = 1; hits++; st[j] = 'ok'; } else st[j] = 'bad';
+        });
+        draw();
+        var N = pat.filter(function (v) { return !isRest(v); }).length, extra = taps.length - hits;
+        if (hits === N && extra === 0) setFb('ok', '¡Justo en el pulso!', 'Acertaste las ' + N + ' figuras.');
+        else setFb(hits >= N / 2 ? 'info' : 'bad', 'Acertaste ' + hits + ' de ' + N, (extra > 0 ? 'Tocaste ' + extra + (extra === 1 ? ' vez' : ' veces') + ' de más. ' : '') + 'Las figuras en verde fueron a tiempo. Puedes intentarlo otra vez.');
+        go.disabled = false; go.textContent = '↻ Intentar otra vez'; unlock();
+      }
+      go.addEventListener('click', function () {
+        if (run) return; run = true; taps = []; st = {}; t0 = performance.now(); go.disabled = true; pad.disabled = false; pad.focus(); draw();
+        setFb('info', 'Cuenta…', 'Escucha los 4 clics.');
+        runPattern(pat, { count: true, clicks: true, sound: false, onTick: function (i) { setFb('info', 'Cuenta', (i + 1) + '…'); }, onBeat: function (b) { on = b; draw(); if (b === 0) setFb('info', '¡Ahora!', 'Toca cada figura a tiempo.'); }, done: finish });
+      });
+      draw(); setFb('info', 'Listo', 'Pulsa Empezar cuando quieras.');
+    };
+  }
+
+  function buildMeter() {
+    var s = [stepPulse(), stepMeters()];
+    [4, 3, 2].forEach(function (nb) { s.push(fillFor(nb)); });
+    shuffle([2, 3, 4]).slice(0, 2).forEach(function (nb) { s.push(stepMeterEar(nb)); });
+    s.push(stepBuild({
+      kicker: 'Construye', title: 'Llena un compás de 4/4', nb: 4,
+      lead: 'Toca las figuras para llenar el compás. Usa al menos dos figuras distintas.',
+      check: function (e) { return distinct(e) >= 2; },
+      ok: 'Cuatro tiempos exactos. Un compás de 4/4 siempre suma 4.', missing: 'Sumaste 4, pero con una sola figura. Cambia alguna por otra distinta.'
+    }));
+    s.push(stepBuild({
+      kicker: 'Construye', title: 'Llena un compás de 3/4', nb: 3,
+      lead: 'Ahora el compás tiene 3 tiempos. Llénalo usando al menos una blanca.',
+      check: function (e) { return countOf(e, 'h') >= 1; },
+      ok: 'Tres tiempos exactos. Una blanca y una negra suman 3, como en un vals.', missing: 'Sumaste 3, pero te falta una blanca. Cambia dos negras por una blanca.'
+    }));
+    shuffle(HEARP).slice(0, 0);
+    s.push(stepHear()); s.push(stepHear());
+    s.push(stepTap(pick([['q', 'q', 'h'], ['h', 'q', 'q'], ['q', 'e', 'e', 'q', 'q']], 1)[0]));
+    s.push(stepSummary(4, {
+      title: 'Ya cuentas tiempos y compases',
+      fig: METERS.map(function (m) { var e = []; for (var k = 0; k < m.nb; k++) e.push({ v: 'q' }); return rhythmSVG({ events: e, ts: m.t, nbeats: m.nb, bars: true, counts: true, label: 'Compás de ' + m.t }); }).join(''),
+      hint: 'Tus tres compases: 2/4, 3/4 y 4/4. Cada uno cuenta sus tiempos y vuelve a empezar.',
+      bindFig: function () { }
+    }));
+    return s;
+  }
+
+  var BUILD = { 1: buildL1, 2: buildBass, 3: buildValues, 4: buildMeter, 5: buildL2, 6: buildL3 };
 
   function startLesson(n) {
     lessonN = n; results = []; curClef = n === 2 ? 'bass' : 'treble'; frame();
