@@ -181,6 +181,8 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
   var W = 360, VH = 168, H = 8, Y12 = 24, K = 16 / 250;
   var KB_W = 360, KB_H = 140;
   var CLEF = "M441 -245c-23 -4 -48 -6 -76 -6c-59 0 -102 7 -130 20c-88 42 -150 93 -187 154c-26 44 -43 103 -48 176c0 6 -1 13 -1 19c0 54 15 111 45 170c29 57 65 106 110 148s96 85 153 127c-3 16 -8 46 -13 92c-4 43 -5 73 -5 89c0 117 16 172 69 257c34 54 64 82 89 82 c21 0 43 -30 69 -92s39 -115 41 -159v-15c0 -109 -21 -162 -67 -241c-13 -20 -63 -90 -98 -118c-13 -9 -25 -19 -37 -29l31 -181c8 1 18 2 28 2c58 0 102 -12 133 -35c59 -43 92 -104 98 -184c1 -7 1 -15 1 -22c0 -123 -87 -209 -181 -248c8 -57 17 -110 25 -162 c5 -31 6 -58 6 -80c0 -30 -5 -53 -14 -70c-35 -64 -88 -99 -158 -103c-5 0 -11 -1 -16 -1c-37 0 -72 10 -108 27c-50 24 -77 59 -80 105v11c0 29 7 55 20 76c18 28 45 42 79 44h6c49 0 93 -42 97 -87v-9c0 -51 -34 -86 -105 -106c17 -24 51 -36 102 -36c62 0 116 43 140 85 c9 16 13 41 13 74c0 20 -1 42 -5 67c-8 53 -18 106 -26 159zM461 939c-95 0 -135 -175 -135 -286c0 -24 2 -48 5 -71c50 39 92 82 127 128c40 53 60 100 60 140v8c-4 53 -22 81 -55 81h-2zM406 119l54 -326c73 25 110 78 110 161c0 7 0 15 -1 23c-7 95 -57 142 -151 142h-12 zM382 117c-72 -2 -128 -47 -128 -120v-7c2 -46 43 -99 75 -115c-3 -2 -7 -5 -10 -10c-70 33 -116 88 -123 172v11c0 68 44 126 88 159c23 17 49 29 78 36l-29 170c-21 -13 -52 -37 -92 -73c-50 -44 -86 -84 -109 -119c-45 -69 -67 -130 -67 -182v-13c5 -68 35 -127 93 -176 s125 -73 203 -73c25 0 50 3 75 9c-19 111 -36 221 -54 331z";
+  var CLEFB = "M582 -120c0 32 26 58 58 58s58 -26 58 -58s-26 -58 -58 -58s-58 26 -58 58zM582 120c0 32 26 58 58 58s58 -26 58 -58s-26 -58 -58 -58s-58 26 -58 58zM158 96c51 0 73 -14 88 -49l16 -39c0 -17 -2 -30 -7 -40c-3 -11 -10 -21 -19 -31c-17 -18 -49 -43 -84 -43 c-55 0 -77 13 -112 44c-24 21 -35 55 -35 100c0 46 14 81 32 112c30 52 71 79 137 93l36 6l26 2c154 0 235 -68 274 -182c11 -32 18 -68 18 -107c0 -103 -26 -182 -68 -250c-89 -145 -234 -230 -412 -288l-30 -5c-9 0 -14 3 -14 8c3 10 5 11 10 16c35 15 70 30 96 44l78 43 c96 57 162 136 197 258c9 33 17 60 22 100c3 22 5 35 6 39c-7 69 -16 115 -23 140s-4 22 -16 40c-8 12 -19 23 -31 34c-24 21 -62 44 -118 44c-48 0 -84 -8 -113 -28c-28 -19 -42 -44 -42 -73v-16c2 -5 3 -9 4 -11c24 22 52 39 84 39z";
+  var curClef = 'treble';
   function yOf(step) { return Y12 + (12 - step) * H; }
   function $(id) { return document.getElementById(id); }
 
@@ -190,16 +192,18 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
   var SEMI = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
   var SN = ['Do', 'Do♯', 'Re', 'Re♯', 'Mi', 'Fa', 'Fa♯', 'Sol', 'Sol♯', 'La', 'La♯', 'Si'];
   var FN = ['Do', 'Re♭', 'Re', 'Mi♭', 'Mi', 'Fa', 'Sol♭', 'Sol', 'La♭', 'La', 'Si♭', 'Si'];
-  // step 0 = línea 1 (Mi4); step -2 = Do central (Do4)
-  function info(step) {
-    var a = step + 2, li = ((a % 7) + 7) % 7, letter = LETTERS[li], oct = 4 + Math.floor(a / 7);
+  // Clave de sol: step 0 = línea 1 (Mi4); step -2 = Do central (Do4).
+  // Clave de fa: step 0 = línea 1 (Sol2); step 10 = Do central (Do4).
+  function info(step, clef) {
+    var bass = (clef || curClef) === 'bass';
+    var a = step + (bass ? 4 : 2), li = ((a % 7) + 7) % 7, letter = LETTERS[li], oct = (bass ? 2 : 4) + Math.floor(a / 7);
     return { letter: letter, es: ES[letter], oct: oct, midi: 12 * (oct + 1) + SEMI[letter] };
   }
   function pcOf(m) { return ((m % 12) + 12) % 12; }
   function nameOf(m) { return SN[pcOf(m)]; }
   function accSym(acc) { return acc > 0 ? '♯' : acc < 0 ? '♭' : ''; }
-  function accName(step, acc) { return info(step).es + accSym(acc); }
-  function midiOf(step, acc) { return info(step).midi + (acc || 0); }
+  function accName(step, acc, clef) { return info(step, clef).es + accSym(acc); }
+  function midiOf(step, acc, clef) { return info(step, clef).midi + (acc || 0); }
   function loc(step) {
     if (step >= 0 && step <= 8) return step % 2 === 0 ? 'línea ' + (step / 2 + 1) : 'espacio ' + ((step + 1) / 2);
     if (step === -2) return 'línea adicional debajo del pentagrama';
@@ -233,7 +237,7 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
       g.connect(lp); lp.connect(ac.destination);
     } catch (e) { /* sin audio */ }
   }
-  function play(step, acc) { playMidi(midiOf(step, acc)); }
+  function play(step, acc, clef) { playMidi(midiOf(step, acc, clef)); }
   function clearTimers() { timers.forEach(clearTimeout); timers = []; }
   function playSeq(ms, gap, each) {
     clearTimers();
@@ -277,7 +281,10 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     });
     [0, 2, 4, 6, 8].forEach(function (st) { s += '<line class="sl" x1="6" x2="' + (W - 6) + '" y1="' + yOf(st) + '" y2="' + yOf(st) + '"/>'; });
     s += '<line class="sl" x1="6" x2="6" y1="' + yOf(8) + '" y2="' + yOf(0) + '"/>';
-    if (clef) s += '<g class="clef" transform="translate(16 ' + yOf(2) + ') scale(' + K + ' ' + (-K) + ')"><path d="' + CLEF + '"/></g>';
+    if (clef) {
+      var bassC = (o.clefType || curClef) === 'bass';
+      s += '<g class="clef" transform="translate(16 ' + yOf(bassC ? 6 : 2) + ') scale(' + K + ' ' + (-K) + ')"><path d="' + (bassC ? CLEFB : CLEF) + '"/></g>';
+    }
     if (o.extra) s += o.extra;
     notes.forEach(function (n, i) { s += noteSVG(n, i); });
     return s + '</svg>';
@@ -346,8 +353,19 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
   // ---------- Estado y progreso ----------
   var app = document.getElementById('app');
   var steps = [], idx = 0, results = [], lessonN = 1;
-  var PKEY = 'compas-progreso';
-  function getProg() { try { return JSON.parse(localStorage.getItem(PKEY) || '{}') || {}; } catch (e) { return {}; } }
+  var PKEY = 'compas-progreso-v2', OLDKEY = 'compas-progreso';
+  function getProg() {
+    try {
+      var raw = localStorage.getItem(PKEY);
+      if (raw) return JSON.parse(raw) || {};
+      var old = JSON.parse(localStorage.getItem(OLDKEY) || 'null');
+      if (old) {
+        var m = {}; if (old[1]) m[1] = old[1]; if (old[2]) m[3] = old[2]; if (old[3]) m[4] = old[3];
+        localStorage.setItem(PKEY, JSON.stringify(m)); return m;
+      }
+    } catch (e) { }
+    return {};
+  }
   function saveProg(n, g, t) {
     try { var p = getProg(), o = p[n]; if (!o || g / t > o.g / o.t) p[n] = { g: g, t: t }; localStorage.setItem(PKEY, JSON.stringify(p)); } catch (e) { }
   }
@@ -355,6 +373,7 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
   // ---------- Inicio ----------
   var COURSE = [
     { t: 'Notas en el pentagrama y clave de sol', d: 'Lee las notas desde el Do central hasta el La agudo.' },
+    { t: 'Clave de fa: las notas graves', d: 'Lee los sonidos graves y encuentra el Do central, que queda justo encima del pentagrama.' },
     { t: 'El teclado y los semitonos', d: 'Teclas blancas y negras, tonos, semitonos, sostenidos y bemoles.' },
     { t: 'Escalas mayores y tonalidades', d: 'El patrón de la escala mayor y por qué cada tonalidad lleva sostenidos o bemoles.' },
     { t: 'Intervalos', d: 'La distancia entre dos notas: segundas, terceras, quintas y octavas.' },
@@ -362,7 +381,7 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     { t: 'Progresiones de acordes', d: 'I – IV – V – I y otras secuencias que se repiten en miles de canciones.' }
   ];
   function home() {
-    clearTimers();
+    clearTimers(); curClef = 'treble';
     var prog = getProg();
     var hero = [-2, -1, 0, 1, 2].map(function (st, i) {
       return { step: st, x: 100 + i * 52, tap: true, label: ES[info(st).letter], aria: ES[info(st).letter] };
@@ -466,22 +485,24 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     draw(); setFb('info', 'Cuenta desde abajo', 'La línea de más abajo es la línea 1. El primer espacio está entre la línea 1 y la 2.');
   }
 
-  function stepClef() {
-    stageEl.innerHTML = head('Paso 2', 'La clave de sol', 'Este símbolo va al inicio del pentagrama y indica qué nota es cada posición. Su espiral rodea una línea. <b>Tócala.</b>') + figHTML();
-    var fig = $('fig'), done = false;
-    function draw(b) { fig.innerHTML = staffSVG({ bands: b || [] }); bind(fig, { onPos: tap }); }
-    function tap(st) {
-      if (done) return;
-      if (st === 2) {
-        done = true; draw([{ step: 2, kind: 'ok' }]); play(2);
-        setFb('ok', '¡Eso es!', 'La espiral de la clave rodea la línea 2, y esa línea es <b>Sol</b>. Por eso se llama clave de sol.');
-        unlock();
-      } else {
-        draw([{ step: st, kind: 'bad' }]);
-        setFb('bad', 'Casi', 'Tocaste ' + (st >= 0 && st <= 8 ? loc(st) : 'fuera del pentagrama') + '. Busca la línea que queda en el centro de la espiral.');
+  function stepClef(c) {
+    return function () {
+      stageEl.innerHTML = head(c.kicker, c.title, c.lead) + figHTML();
+      var fig = $('fig'), done = false;
+      function draw(b) { fig.innerHTML = staffSVG({ bands: b || [] }); bind(fig, { onPos: tap }); }
+      function tap(st) {
+        if (done) return;
+        if (st === c.target) {
+          done = true; draw([{ step: c.target, kind: 'ok' }]); play(st);
+          setFb('ok', '¡Eso es!', c.okText);
+          unlock();
+        } else {
+          draw([{ step: st, kind: 'bad' }]);
+          setFb('bad', 'Casi', 'Tocaste ' + (st >= 0 && st <= 8 ? loc(st) : 'fuera del pentagrama') + '. ' + c.hintBad);
+        }
       }
-    }
-    draw(); setFb('info', 'Pista', 'La espiral empieza en la línea 2, contando desde abajo.');
+      draw(); setFb('info', 'Pista', c.hint);
+    };
   }
 
   // Exploración de notas en el pentagrama. Cada elemento es un número (step) o {step, acc}.
@@ -509,17 +530,19 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     };
   }
 
-  function stepName(st) {
-    var d = info(st);
+  function stepName(st, clef) {
+    clef = clef || curClef;
+    var d = info(st, clef);
     var opts = pick(LETTERS.filter(function (l) { return l !== d.letter; }), 3).concat([d.letter]);
     opts.sort(function (a, b) { return LETTERS.indexOf(a) - LETTERS.indexOf(b); });
+    var cname = clef === 'bass' ? 'clave de fa' : 'clave de sol';
     return stepChoice({
-      title: '¿Qué nota es?', lead: 'Mírala en el pentagrama y elige su nombre.',
-      fig: function (ok) { return staffSVG({ notes: [{ step: st, x: 210, state: ok === null ? '' : ok ? 'ok' : 'bad', label: ok === null ? '' : d.es }], label: 'Una nota en el pentagrama' }); },
+      title: '¿Qué nota es?', lead: 'Mírala en el pentagrama' + (clef === 'bass' ? ' (<b>clave de fa</b>)' : '') + ' y elige su nombre.',
+      fig: function (ok) { return staffSVG({ clefType: clef, notes: [{ step: st, x: 210, state: ok === null ? '' : ok ? 'ok' : 'bad', label: ok === null ? '' : d.es }], label: 'Una nota en ' + cname }); },
       options: opts.map(function (l) { return { k: l, t: ES[l] }; }), correct: d.letter,
       hint: 'Pista: cuenta las líneas o espacios desde abajo.', wrong: 'Era ' + d.es,
-      explain: 'Esta nota está en ' + loc(st) + ' y se llama <b>' + d.es + '</b> (' + d.letter + ').',
-      sound: function () { play(st); }
+      explain: 'Esta nota está en ' + loc(st) + ' y, en ' + cname + ', se llama <b>' + d.es + '</b> (' + d.letter + ').',
+      sound: function () { play(st, 0, clef); }
     });
   }
 
@@ -582,7 +605,12 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     var quiz1 = shuffle(lines.concat(spaces));
     var quiz2 = shuffle(pick([-2, -1, 9, 10], 2).concat(pick([0, 1, 2, 3, 4, 5, 6, 7, 8], 2)));
     var letters = pick(LETTERS, 4);
-    var s = [stepIntro, stepClef,
+    var s = [stepIntro, stepClef({
+        kicker: 'Paso 2', title: 'La clave de sol',
+        lead: 'Este símbolo va al inicio del pentagrama y indica qué nota es cada posición. Su espiral rodea una línea. <b>Tócala.</b>',
+        target: 2, hint: 'La espiral empieza en la línea 2, contando desde abajo.', hintBad: 'Busca la línea que queda en el centro de la espiral.',
+        okText: 'La espiral de la clave rodea la línea 2, y esa línea es <b>Sol</b>. Por eso se llama clave de sol.'
+      }),
       stepExplore('Paso 3', 'Las notas en las líneas', 'Con clave de sol, las cinco líneas de abajo hacia arriba son <b>Mi, Sol, Si, Re, Fa</b>. Toca cada una.', [0, 2, 4, 6, 8], [100, 150, 200, 250, 300], 'Repítelo en voz alta: Mi, Sol, Si, Re, Fa.'),
       stepExplore('Paso 4', 'Las notas en los espacios', 'Los cuatro espacios de abajo hacia arriba son <b>Fa, La, Do, Mi</b>. Toca cada uno.', [1, 3, 5, 7], [110, 175, 240, 305], 'Repítelo en voz alta: Fa, La, Do, Mi.')];
     quiz1.forEach(function (st) { s.push(stepName(st)); });
@@ -762,7 +790,7 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     pick([{ step: 1, acc: 1 }, { step: 4, acc: -1 }, { step: -2, acc: 1 }, { step: 0, acc: -1 }, { step: 3, acc: -1 }, { step: 2, acc: 1 }, { step: 5, acc: 0 }, { step: -1, acc: 0 }], 4)
       .forEach(function (it) { s.push(stepStaffToKey(it)); });
     var labels = {}; kbLayout(60, 8).forEach(function (k) { if (!k.black) labels[k.midi] = nameOf(k.midi); });
-    s.push(stepSummary(2, {
+    s.push(stepSummary(3, {
       title: 'Ya conoces el teclado',
       fig: keyboardSVG({ start: 60, whites: 8, labels: labels }),
       hint: 'Tu teclado completo: toca las teclas para escucharlas.',
@@ -959,7 +987,7 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
       explain: 'En Fa mayor, el Si baja un semitono y es <b>Si♭</b>. Esa es la única alteración de la tonalidad.', sound: function () { playMidi(70); }
     }));
     var labels = {}; C_SCALE.forEach(function (m, i) { labels[m] = C_NAMES[i]; });
-    s.push(stepSummary(3, {
+    s.push(stepSummary(4, {
       title: 'Ya conoces las tonalidades',
       fig: keyboardSVG({ start: 60, whites: 8, labels: labels }) + '<div class="pat">' + patChips(0, -1) + '</div>',
       hint: 'Do mayor y el patrón T T S T T T S. Toca las teclas para escucharlas.',
@@ -968,10 +996,93 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     return s;
   }
 
-  var BUILD = { 1: buildL1, 2: buildL2, 3: buildL3 };
+
+  // ===================== LECCIÓN 2: CLAVE DE FA =====================
+  function stepMiddleC() {
+    return function () {
+      stageEl.innerHTML = head('Paso 2', 'El Do central une las dos claves',
+        'La clave de sol se usa para los sonidos agudos y la de fa para los graves. El <b>Do central</b> es la misma tecla en ambas, pero se escribe distinto. Toca las dos notas.') +
+        figBox('figT') + figBox('figB') + fbBox();
+      var heard = { T: false, B: false };
+      function draw() {
+        $('figT').innerHTML = staffSVG({ clefType: 'treble', label: 'Do central en clave de sol',
+          notes: [{ step: -2, x: 210, tap: true, state: heard.T ? 'ok' : '', label: 'Clave de sol', aria: 'Do central en clave de sol' }] });
+        $('figB').innerHTML = staffSVG({ clefType: 'bass', label: 'Do central en clave de fa',
+          notes: [{ step: 10, x: 210, tap: true, state: heard.B ? 'ok' : '', label: 'Clave de fa', aria: 'Do central en clave de fa' }] });
+        bind($('figT'), { onNote: function () { heard.T = true; play(-2, 0, 'treble'); after('T'); } });
+        bind($('figB'), { onNote: function () { heard.B = true; play(10, 0, 'bass'); after('B'); } });
+      }
+      function after(which) {
+        draw();
+        if (heard.T && heard.B) { setFb('ok', 'Es el mismo sonido', 'Arriba, el Do central queda en una línea adicional <b>debajo</b> del pentagrama. Abajo, en una línea adicional <b>encima</b>. Los dos suenan igual.'); unlock(); }
+        else setFb('info', 'Do central', (which === 'T' ? 'En clave de sol, cuelga debajo de la línea 1.' : 'En clave de fa, cuelga encima de la línea 5.') + ' Falta tocar la otra.');
+      }
+      draw(); setFb('info', 'Toca las dos notas', 'Las dos son Do, y las dos suenan igual.');
+    };
+  }
+
+  function stepCompare() {
+    return function () {
+      var POS = [{ s: 0, t: 'Línea 1' }, { s: 3, t: 'Espacio 2' }, { s: 4, t: 'Línea 3' }, { s: 8, t: 'Línea 5' }];
+      stageEl.innerHTML = head('Paso 6', 'Misma posición, otro nombre',
+        'Una nota en la misma posición del pentagrama se llama distinto según la clave. Elige una posición y compara.') +
+        '<div class="chips" id="chips"></div>' + figBox('figT') + figBox('figB') + fbBox();
+      var sel = 0, seen = { 0: 1 }, count = 1;
+      function draw() {
+        $('chips').innerHTML = POS.map(function (p, i) { return '<button class="chip' + (seen[i] ? ' seen' : '') + '" data-i="' + i + '" aria-pressed="' + (i === sel) + '">' + p.t + '</button>'; }).join('');
+        var s = POS[sel].s, t = info(s, 'treble'), b = info(s, 'bass');
+        $('figT').innerHTML = staffSVG({ clefType: 'treble', notes: [{ step: s, x: 210, label: t.es }], label: 'Clave de sol' });
+        $('figB').innerHTML = staffSVG({ clefType: 'bass', notes: [{ step: s, x: 210, label: b.es }], label: 'Clave de fa' });
+        var txt = POS[sel].t + ': en clave de sol es <b>' + t.es + '</b>; en clave de fa es <b>' + b.es + '</b>.';
+        if (count >= 3) { setFb('ok', 'Cada clave tiene su lectura', txt + ' En clave de fa el nombre se corre dos letras más arriba (Mi → Sol, Si → Re).'); unlock(); }
+        else setFb('info', 'Compara', txt + ' Prueba otras posiciones.');
+      }
+      $('chips').addEventListener('click', function (e) {
+        var bt = e.target.closest ? e.target.closest('.chip') : null; if (!bt) return;
+        sel = +bt.getAttribute('data-i'); if (!seen[sel]) { seen[sel] = 1; count++; }
+        draw(); playSeq([midiOf(POS[sel].s, 0, 'treble'), midiOf(POS[sel].s, 0, 'bass')], 600);
+      });
+      draw();
+    };
+  }
+
+  function buildBass() {
+    var lines = pick([0, 2, 4, 6, 8], 3), spaces = pick([1, 3, 5, 7], 2);
+    var quiz1 = shuffle(lines.concat(spaces));
+    var letters = pick(LETTERS, 3);
+    var mixed = shuffle(
+      pick([-2, -1, 9, 10, 0, 1, 2, 3, 4, 5, 6, 7, 8], 3).map(function (st) { return { st: st, clef: 'bass' }; })
+        .concat(pick([0, 1, 2, 3, 4, 5, 6, 7, 8], 2).map(function (st) { return { st: st, clef: 'treble' }; })));
+    var s = [
+      stepClef({
+        kicker: 'Paso 1', title: 'La clave de fa',
+        lead: 'Esta clave se usa para los sonidos graves. Sus <b>dos puntos</b> rodean una línea. <b>Tócala.</b>',
+        target: 6, hint: 'Los puntos rodean la línea 4, contando desde abajo.', hintBad: 'Busca la línea que queda entre los dos puntos de la clave.',
+        okText: 'Los dos puntos rodean la línea 4, y esa línea es <b>Fa</b>. Por eso se llama clave de fa.'
+      }),
+      stepMiddleC(),
+      stepExplore('Paso 3', 'Las notas en las líneas', 'Con clave de fa, las cinco líneas de abajo hacia arriba son <b>Sol, Si, Re, Fa, La</b>. Toca cada una.', [0, 2, 4, 6, 8], [100, 150, 200, 250, 300], 'Repítelo en voz alta: Sol, Si, Re, Fa, La.'),
+      stepExplore('Paso 4', 'Las notas en los espacios', 'Los cuatro espacios de abajo hacia arriba son <b>La, Do, Mi, Sol</b>. Toca cada uno.', [1, 3, 5, 7], [110, 175, 240, 305], 'Repítelo en voz alta: La, Do, Mi, Sol.')
+    ];
+    quiz1.forEach(function (st) { s.push(stepName(st)); });
+    s.push(stepExplore('Paso 5', 'Más allá del pentagrama', 'Aquí también se usan líneas adicionales. Encima del pentagrama queda el <b>Do central</b>; debajo, <b>Fa</b> y <b>Mi</b>.', [-2, -1, 9, 10], [105, 165, 235, 295], 'Sigue el mismo orden: ... Mi, Fa, Sol, La, Si, Do.'));
+    s.push(stepCompare());
+    letters.forEach(function (l) { s.push(stepPlace(l)); });
+    mixed.forEach(function (m) { s.push(stepName(m.st, m.clef)); });
+    var map = [0, 1, 2, 3, 4, 5, 6, 7, 8].map(function (st, i) { return { step: st, x: 88 + i * 32, tap: true, label: info(st, 'bass').es, aria: info(st, 'bass').es + ', ' + loc(st) }; });
+    s.push(stepSummary(2, {
+      title: 'Ya lees en clave de fa',
+      fig: staffSVG({ clefType: 'bass', notes: map, label: 'Mapa de notas en clave de fa' }),
+      hint: 'Tu mapa en clave de fa: de la línea 1 a la línea 5. Toca las notas para escucharlas.',
+      bindFig: function (r) { bind(r, { onNote: function (i) { play(map[i].step, 0, 'bass'); } }); }
+    }));
+    return s;
+  }
+
+  var BUILD = { 1: buildL1, 2: buildBass, 3: buildL2, 4: buildL3 };
 
   function startLesson(n) {
-    lessonN = n; results = []; frame();
+    lessonN = n; results = []; curClef = n === 2 ? 'bass' : 'treble'; frame();
     steps = BUILD[n]();
     go(0);
   }
