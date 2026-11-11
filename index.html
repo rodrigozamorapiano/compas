@@ -11,7 +11,6 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=DM+Sans:wght@400;500;700&display=swap">
 <style>
 html, body { margin: 0; height: 100%; }
-
 /* Diseño único en negro: fondo negro, títulos en amarillo dorado, pentagrama y teclas en tonos claros.
    Inicio = pentagrama de bienvenida + ruta de lecciones. Lección = progreso arriba, figura al centro, botón abajo. */
 :root {
@@ -217,6 +216,28 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
 .stack .row2 { margin-top: 0; }
 @media (max-width: 380px) { .row2 { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+
+.hand .palm { fill: #17171C; stroke: var(--line); stroke-width: 2; }
+.hand .fing { cursor: default; }
+.hand .fng { fill: #17171C; stroke: #666672; stroke-width: 2; }
+.hand .fing.tap { cursor: pointer; }
+.hand .fing.seen .fng { fill: #3A2F14; stroke: var(--accent); }
+.hand .fing.sel .fng, .hand .fing.active .fng { fill: var(--accent); stroke: var(--accent); }
+.hand .fing.ok .fng { fill: var(--ok); stroke: var(--ok); }
+.hand .fing.bad .fng { fill: var(--bad); stroke: var(--bad); }
+.hand .fnum { font: 700 15px var(--f-body); fill: var(--ink); text-anchor: middle; pointer-events: none; }
+.hand .fing.sel .fnum, .hand .fing.active .fnum, .hand .fing.ok .fnum, .hand .fing.bad .fnum { fill: #101014; }
+.pedal .rod { fill: #3A3A44; }
+.pedal .pd { fill: #1A1A20; stroke: #8A7437; stroke-width: 2; }
+.pedal text { font: 700 14px var(--f-body); fill: var(--ink); text-anchor: middle; }
+.pedal.tap { cursor: pointer; }
+.pedal.sel .pd, .pedal.on .pd { fill: var(--accent); }
+.pedal.ok .pd { fill: var(--ok); }
+.pedal.bad .pd { fill: var(--bad); }
+.pedmark { font: italic 700 15px var(--f-body); fill: var(--gold); }
+.rs .lbl { font-size: 13px; }
+.rs .seg { fill: var(--line); }
+.rs .seg.now { fill: var(--accent); }
 </style>
 
 </head>
@@ -266,9 +287,10 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
   function plural(n, s, p) { return n + ' ' + (n === 1 ? s : p); }
 
   // ---------- Sonido ----------
-  var ac = null, soundOn = true, timers = [];
+  var ac = null, soundOn = true, timers = [], pianoOn = false;
   function playMidi(m) {
     if (!soundOn) return;
+    if (pianoOn) { playNote(m, 1.5); return; }
     try {
       ac = ac || new (window.AudioContext || window.webkitAudioContext)();
       if (ac.state === 'suspended') ac.resume();
@@ -288,16 +310,17 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
   }
   function play(step, acc, clef) { playMidi(midiOf(step, acc, clef)); }
   // Piano digital sintetizado: armónicos que se apagan a distinto ritmo, golpe de martillo y filtro que se cierra.
-  function pianoVoice(ctx, dest, m, dur, t) {
+  function pianoVoice(ctx, dest, m, dur, t, opt) {
+    opt = opt || {};
     var f = 440 * Math.pow(2, (m - 69) / 12), d = Math.max(0.12, dur);
     var tau = Math.max(0.9, Math.min(3.2, 2.6 * Math.pow(261.6 / f, 0.35)));
     var master = ctx.createGain(), lp = ctx.createBiquadFilter(), rel = Math.min(0.09, d * 0.4);
     lp.type = 'lowpass'; lp.Q.value = 0.5;
-    lp.frequency.setValueAtTime(Math.min(10000, f * 10), t);
-    lp.frequency.exponentialRampToValueAtTime(Math.max(1200, f * 3), t + 0.8);
+    lp.frequency.setValueAtTime(Math.min(10000, f * 10) * (opt.dark || 1), t);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(1200, f * 3) * (opt.dark || 1), t + 0.8);
     master.gain.setValueAtTime(0.0001, t);
-    master.gain.linearRampToValueAtTime(1, t + 0.004);
-    master.gain.setValueAtTime(1, t + d - rel);
+    master.gain.linearRampToValueAtTime(opt.gain || 1, t + 0.004);
+    master.gain.setValueAtTime(opt.gain || 1, t + d - rel);
     master.gain.exponentialRampToValueAtTime(0.0001, t + d);
     var AMP = [1, 0.55, 0.3, 0.18, 0.1, 0.06];
     for (var i = 0; i < AMP.length; i++) {
@@ -320,12 +343,12 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     ns.connect(bp); bp.connect(ng); ng.connect(master); ns.start(t);
     master.connect(lp); lp.connect(dest);
   }
-  function playNote(m, dur) {
+  function playNote(m, dur, opt) {
     if (!soundOn) return;
     try {
       ac = ac || new (window.AudioContext || window.webkitAudioContext)();
       if (ac.state === 'suspended') ac.resume();
-      pianoVoice(ac, ac.destination, m, dur, ac.currentTime);
+      pianoVoice(ac, ac.destination, m, dur, ac.currentTime, opt);
     } catch (e) { /* sin audio */ }
   }
   function playClick(acc) {
@@ -366,7 +389,7 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     if (n.tap) g += '<circle class="hit" cx="' + x + '" cy="' + y + '" r="21"/>';
     led.forEach(function (l) { g += '<line class="led" x1="' + (x - 17) + '" x2="' + (x + 17) + '" y1="' + yOf(l) + '" y2="' + yOf(l) + '"/>'; });
     if (n.acc > 0) g += sharpSVG(x - 25, y); else if (n.acc < 0) g += flatSVG(x - 23, y);
-    if (n.step < 4) g += '<line class="stem" x1="' + (x + 9) + '" y1="' + (y - 1) + '" x2="' + (x + 9) + '" y2="' + (y - 54) + '"/>';
+    if (n.nostem) { } else if (n.step < 4) g += '<line class="stem" x1="' + (x + 9) + '" y1="' + (y - 1) + '" x2="' + (x + 9) + '" y2="' + (y - 54) + '"/>';
     else g += '<line class="stem" x1="' + (x - 9) + '" y1="' + (y + 1) + '" x2="' + (x - 9) + '" y2="' + (y + 54) + '"/>';
     g += '<ellipse class="head" cx="' + x + '" cy="' + y + '" rx="10.5" ry="7.4" transform="rotate(-20 ' + x + ' ' + y + ')"/>';
     if (n.label) g += '<text class="lbl" x="' + x + '" y="' + (VH - 4) + '" text-anchor="middle">' + n.label + '</text>';
@@ -485,7 +508,7 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     { t: 'Pedales del piano', d: 'Para qué sirve cada pedal y cuándo usarlo.' }
   ];
   function home() {
-    clearTimers(); curClef = 'treble';
+    clearTimers(); curClef = 'treble'; pianoOn = false;
     var prog = getProg();
     var hero = [-2, -1, 0, 1, 2].map(function (st, i) {
       return { step: st, x: 100 + i * 52, tap: true, label: ES[info(st).letter], aria: ES[info(st).letter] };
@@ -554,6 +577,7 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
       var fig = $('fig'), opts = $('opts');
       fig.innerHTML = c.fig(null);
       opts.innerHTML = c.options.map(function (o) { return '<button class="opt" data-k="' + o.k + '">' + o.t + (o.s ? '<small>' + o.s + '</small>' : '') + '</button>'; }).join('');
+      if (c.cols) opts.style.gridTemplateColumns = c.cols;
       setFb('info', 'Elige una respuesta', c.hint || '');
       opts.addEventListener('click', function (e) {
         var b = e.target.closest ? e.target.closest('.opt') : null; if (!b || b.disabled) return;
@@ -759,7 +783,7 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
         var marks = {}, labels = {};
         Object.keys(seen).forEach(function (k) { marks[k] = 'seen'; if (c.label) labels[k] = c.label(+k); });
         if (cur !== null) marks[cur] = 'active';
-        fig.innerHTML = keyboardSVG({ start: 60, whites: 8, marks: marks, labels: labels });
+        fig.innerHTML = keyboardSVG({ start: c.start === undefined ? 60 : c.start, whites: 8, marks: marks, labels: labels });
         bindKeys(fig, tap);
       }
       function tap(m) {
@@ -1761,10 +1785,845 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
     return s;
   }
 
-  var BUILD = { 1: buildL1, 2: buildBass, 3: buildValues, 4: buildMeter, 5: buildL2, 6: buildL3 };
+  // ===================== COMÚN A LAS LECCIONES 7 A 10 =====================
+  function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function playChord(ms, gap) {
+    ms.forEach(function (m, i) { timers.push(setTimeout(function () { playMidi(m); }, i * (gap || 0))); });
+  }
+  function bindKeysAll(root, fn) {
+    [].forEach.call(root.querySelectorAll('svg'), function (svg) {
+      svg.addEventListener('click', function (e) { var g = e.target.closest ? e.target.closest('.key') : null; if (g) fn(+g.getAttribute('data-m')); });
+      svg.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        var g = e.target.closest ? e.target.closest('.key') : null; if (g) { e.preventDefault(); fn(+g.getAttribute('data-m')); }
+      });
+    });
+  }
+  // Escucha y elige: c.play() suena, las opciones se habilitan tras la primera escucha.
+  function stepEarPick(c) {
+    return function () {
+      stageEl.innerHTML = head(c.kicker || 'Escucha', c.title, c.lead) + '<div class="tools"><button class="btn ghost" id="hearX">▶ Escuchar</button></div>' +
+        '<div class="opts" id="opts"' + (c.cols ? ' style="grid-template-columns:' + c.cols + '"' : '') + '>' +
+        c.options.map(function (o) { return '<button class="opt" data-k="' + o.k + '" disabled>' + o.t + '</button>'; }).join('') + '</div>' + fbBox();
+      var opts = $('opts'), btn = $('hearX'), answered = false;
+      setFb('info', 'Primero escucha', c.hint || 'Puedes repetirlo las veces que quieras.');
+      btn.addEventListener('click', function () {
+        btn.disabled = true; btn.textContent = '↻ Escuchar otra vez';
+        if (!answered) [].forEach.call(opts.children, function (x) { x.disabled = false; });
+        clearTimers(); c.play();
+        timers.push(setTimeout(function () { btn.disabled = false; }, c.ms || 2000));
+      });
+      opts.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.opt') : null; if (!b || b.disabled || answered) return;
+        answered = true; var ok = b.getAttribute('data-k') === String(c.correct); results.push(ok);
+        [].forEach.call(opts.children, function (x) {
+          x.disabled = true;
+          if (x.getAttribute('data-k') === String(c.correct)) x.classList.add('ok'); else if (x === b) x.classList.add('bad'); else x.classList.add('dim');
+        });
+        setFb(ok ? 'ok' : 'bad', ok ? '¡Correcto!' : (c.wrong || 'Casi'), c.explain);
+        unlock();
+      });
+    };
+  }
+
+  // ===================== LECCIÓN 7: DIGITACIÓN =====================
+  var FNAMES = ['Pulgar', 'Índice', 'Medio', 'Anular', 'Meñique'];
+  var RHM = { 1: 60, 2: 62, 3: 64, 4: 65, 5: 67 }, LHM = { 1: 55, 2: 53, 3: 52, 4: 50, 5: 48 };
+  function fMap(h) { return h === 'RH' ? RHM : LHM; }
+  function fOf(h, m) { var mp = fMap(h); for (var f = 1; f <= 5; f++) if (mp[f] === m) return f; return 0; }
+  function handName(h) { return h === 'RH' ? 'mano derecha' : 'mano izquierda'; }
+  function handSVG(h, o) {
+    o = o || {};
+    var mir = h === 'LH';
+    function X(x) { return mir ? 360 - x : x; }
+    var F = { 2: { x: 118, y: 42, hh: 74 }, 3: { x: 166, y: 28, hh: 88 }, 4: { x: 214, y: 40, hh: 76 }, 5: { x: 262, y: 58, hh: 58 } };
+    var s = '<svg class="hand" viewBox="0 0 360 172" role="group" aria-label="' + (h === 'RH' ? 'Mano derecha' : 'Mano izquierda') + '">';
+    s += '<rect class="palm" x="70" y="104" width="220" height="62" rx="28"/>';
+    function fing(f, inner) {
+      var cls = 'fing' + (o.sel === f ? ' sel' : '') + (o.seen && o.seen[f] ? ' seen' : '') + (o.tap ? ' tap' : '');
+      return '<g class="' + cls + '" data-f="' + f + '"' + (o.tap ? ' role="button" tabindex="0" aria-label="Dedo ' + f + ', ' + FNAMES[f - 1] + '"' : '') + '>' + inner + '</g>';
+    }
+    [2, 3, 4, 5].forEach(function (f) {
+      var d = F[f], cx = X(d.x);
+      s += fing(f, '<rect class="fng" x="' + (cx - 19) + '" y="' + d.y + '" width="38" height="' + d.hh + '" rx="19"/>' + (o.nums === false ? '' : '<text class="fnum" x="' + cx + '" y="' + (d.y + 27) + '">' + f + '</text>'));
+    });
+    var tx = X(62), ang = mir ? 52 : -52;
+    s += fing(1, '<g transform="rotate(' + ang + ' ' + tx + ' 128)"><rect class="fng" x="' + (tx - 19) + '" y="84" width="38" height="68" rx="19"/>' +
+      (o.nums === false ? '' : '<text class="fnum" x="' + tx + '" y="110" transform="rotate(' + (-ang) + ' ' + tx + ' 110)">1</text>') + '</g>');
+    return s + '</svg>';
+  }
+
+  function stepHandIntro() {
+    return function () {
+      stageEl.innerHTML = head('Paso 1', 'Los dedos tienen número', 'Para tocar con orden, cada dedo lleva un número del <b>1 al 5</b>, empezando por el pulgar. Es igual en las dos manos. Toca cada dedo de las dos manos y escucha la nota que le toca en la posición de Do.') +
+        '<div class="chips" id="chips"></div>' + figBox('fig') + fbBox();
+      var hand = 'RH', seen = { RH: {}, LH: {} }, total = 0, cur = 0, fig = $('fig');
+      function draw() {
+        $('chips').innerHTML = ['RH', 'LH'].map(function (h) { return '<button class="chip' + (Object.keys(seen[h]).length === 5 ? ' seen' : '') + '" data-h="' + h + '" aria-pressed="' + (h === hand) + '">' + cap(handName(h)) + '</button>'; }).join('');
+        fig.innerHTML = handSVG(hand, { tap: true, seen: seen[hand], sel: cur });
+      }
+      $('chips').addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.chip') : null; if (!b) return;
+        hand = b.getAttribute('data-h'); cur = 0; draw();
+      });
+      function pickF(e) {
+        var g = e.target.closest ? e.target.closest('.fing') : null; if (!g) return;
+        var f = +g.getAttribute('data-f'); cur = f;
+        if (!seen[hand][f]) { seen[hand][f] = 1; total++; }
+        playMidi(fMap(hand)[f]); draw();
+        var ttl = 'Dedo ' + f + ' · ' + FNAMES[f - 1], txt = cap(handName(hand)) + ': en la posición de Do toca ' + nameOf(fMap(hand)[f]) + '.';
+        if (total === 10) { setFb('ok', ttl, txt + ' Ya conoces los diez dedos.'); unlock(); }
+        else setFb('info', ttl, txt + ' Faltan ' + (10 - total) + ' dedos por tocar.');
+      }
+      fig.addEventListener('click', pickF);
+      fig.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickF(e); } });
+      draw(); setFb('info', 'Toca cada dedo', 'El pulgar es el 1 y el meñique es el 5, en las dos manos.');
+    };
+  }
+  function stepFingerNumQ(h, f) {
+    var opts = pick([1, 2, 3, 4, 5].filter(function (x) { return x !== f; }), 3).concat([f]).sort();
+    return stepChoice({
+      title: '¿Qué número tiene?', lead: 'Mira el dedo marcado de la <b>' + handName(h) + '</b>. ¿Qué número le corresponde?',
+      fig: function (ok) { return handSVG(h, { sel: f, nums: ok !== null }); },
+      options: opts.map(function (x) { return { k: x, t: x }; }), correct: f,
+      hint: 'El pulgar es 1 y el meñique es 5.', wrong: 'Era el ' + f,
+      explain: 'Es el dedo <b>' + f + '</b>: el ' + FNAMES[f - 1].toLowerCase() + '.'
+    });
+  }
+  function stepFingerNameQ(h, f) {
+    var opts = pick([1, 2, 3, 4, 5].filter(function (x) { return x !== f; }), 3).concat([f]).sort();
+    return stepChoice({
+      title: '¿Cómo se llama?', lead: 'Este es el dedo <b>' + f + '</b>. ¿Cómo se llama?',
+      fig: function () { return handSVG(h, { sel: f }); },
+      options: opts.map(function (x) { return { k: x, t: FNAMES[x - 1] }; }), correct: f,
+      hint: 'Del 1 al 5: pulgar, índice, medio, anular y meñique.', wrong: 'Era el ' + FNAMES[f - 1].toLowerCase(),
+      explain: 'El dedo <b>' + f + '</b> es el <b>' + FNAMES[f - 1].toLowerCase() + '</b>.'
+    });
+  }
+  function stepFingerKey(h, f) {
+    return function () {
+      var map = fMap(h), target = map[f], start = h === 'RH' ? 60 : 48, done = false;
+      stageEl.innerHTML = head('Practica', 'Toca con el dedo ' + f, '<b>' + cap(handName(h)) + '</b>, posición de Do: ¿qué tecla toca el dedo <b>' + f + '</b> (' + FNAMES[f - 1].toLowerCase() + ')?') + figBox('fh') + figBox('kb') + fbBox();
+      $('fh').innerHTML = handSVG(h, { sel: f });
+      function draw(marks) { $('kb').innerHTML = keyboardSVG({ start: start, whites: 8, marks: marks || {} }); bindKeys($('kb'), tap); }
+      function tap(m) {
+        if (done) return; done = true; playMidi(m);
+        var ok = m === target, mk = {}; mk[target] = 'ok'; if (!ok) mk[m] = 'bad';
+        results.push(ok); draw(mk);
+        if (ok) setFb('ok', '¡Correcto!', 'El dedo ' + f + ' de la ' + handName(h) + ' toca <b>' + nameOf(target) + '</b>.');
+        else { setFb('bad', 'Era ' + nameOf(target), 'Tocaste ' + nameOf(m) + '. El dedo ' + f + ' de la ' + handName(h) + ' toca ' + nameOf(target) + '.'); playMidi(target); }
+        unlock();
+      }
+      draw(); setFb('info', 'Toca la tecla', h === 'RH' ? 'El pulgar (1) está sobre el Do central.' : 'El meñique (5) está sobre el Do una octava abajo.');
+    };
+  }
+  function stepStaffFinger(h, f) {
+    var step = h === 'RH' ? f - 3 : 8 - f, ct = h === 'RH' ? 'treble' : 'bass', m = fMap(h)[f];
+    var opts = pick([1, 2, 3, 4, 5].filter(function (x) { return x !== f; }), 3).concat([f]).sort();
+    return stepChoice({
+      title: '¿Qué dedo la toca?',
+      lead: '<b>' + cap(handName(h)) + '</b>, posición de Do (' + (h === 'RH' ? 'pulgar en el Do central' : 'meñique en el Do grave') + '). ¿Qué dedo toca esta nota?',
+      fig: function (ok) { return staffSVG({ clefType: ct, notes: [{ step: step, x: 210, state: ok === null ? '' : ok ? 'ok' : 'bad', label: ok === null ? '' : nameOf(m) }], label: 'Una nota para tocar' }); },
+      options: opts.map(function (x) { return { k: x, t: x }; }), correct: f,
+      hint: 'Cuenta desde la primera nota de la posición.', wrong: 'Era el ' + f,
+      explain: 'Esta nota es <b>' + nameOf(m) + '</b>. En la posición de Do la toca el dedo <b>' + f + '</b> de la ' + handName(h) + '.',
+      sound: function () { playMidi(m); }
+    });
+  }
+  function stepFingerScale(h) {
+    var S = h === 'RH' ? { m: [60, 62, 64, 65, 67, 69, 71, 72], f: [1, 2, 3, 1, 2, 3, 4, 5] } : { m: [48, 50, 52, 53, 55, 57, 59, 60], f: [5, 4, 3, 2, 1, 3, 2, 1] };
+    var start = h === 'RH' ? 60 : 48, names = ['Do', 'Re', 'Mi', 'Fa', 'Sol', 'La', 'Si', 'Do'];
+    var lead = h === 'RH'
+      ? 'Sube de Do a Do con la mano derecha. Los dedos son <b>1 2 3, 1 2 3 4 5</b>: después del 3, el pulgar pasa por debajo de la mano. Sigue las indicaciones.'
+      : 'Sube de Do a Do con la mano izquierda. Los dedos son <b>5 4 3 2 1, 3 2 1</b>: después del pulgar, el dedo 3 cruza por encima. Sigue las indicaciones.';
+    return function () {
+      stageEl.innerHTML = head(h === 'RH' ? 'Paso 4' : 'Paso 5', 'Escala de Do mayor, ' + handName(h), lead) + figBox('fig') + fbBox();
+      var fig = $('fig'), pos = 0, mistakes = 0, flash = null, finished = false;
+      function draw() {
+        var marks = {}, labels = {};
+        for (var j = 0; j < pos; j++) { marks[S.m[j]] = j === pos - 1 ? 'active' : 'ok'; labels[S.m[j]] = S.f[j]; }
+        if (flash !== null) marks[flash] = 'bad';
+        fig.innerHTML = keyboardSVG({ start: start, whites: 8, marks: marks, labels: labels }); bindKeys(fig, tap);
+      }
+      function prompt() {
+        var extra = '';
+        if (h === 'RH' && pos === 3) extra = ' El pulgar pasa por debajo de la mano para tocar el Fa.';
+        if (h === 'LH' && pos === 5) extra = ' El dedo 3 cruza por encima del pulgar para tocar el La.';
+        setFb('info', 'Dedo ' + S.f[pos], 'Toca ' + names[pos] + ' con el dedo ' + S.f[pos] + '.' + extra);
+      }
+      function tap(m) {
+        if (finished) return;
+        if (m === S.m[pos]) {
+          playMidi(m); flash = null; pos++; draw();
+          if (pos === 8) { finished = true; results.push(mistakes === 0); setFb('ok', '¡Escala completa!', 'Dos veces tuviste que cambiar la posición de la mano: así se logra una escala continua sin saltos.'); unlock(); }
+          else prompt();
+        } else {
+          mistakes++; flash = m; playMidi(m); draw();
+          setFb('bad', 'Esa no es', 'La escala sigue con ' + names[pos] + ', con el dedo ' + S.f[pos] + '.');
+          var my = pos; timers.push(setTimeout(function () { if (!finished && pos === my && flash === m) { flash = null; draw(); } }, 700));
+        }
+      }
+      draw(); prompt();
+    };
+  }
+  function buildFinger() {
+    var s = [stepHandIntro()];
+    [['RH', 1], ['LH', 4], ['RH', 5]].forEach(function (p) { s.push(stepFingerNumQ(p[0], p[1])); });
+    s.push(stepFingerNameQ(pick(['RH', 'LH'], 1)[0], pick([2, 3, 4], 1)[0]));
+    var lab = function (map) { return function (m) { for (var f = 1; f <= 5; f++) if (map[f] === m) return f; return ''; }; };
+    s.push(stepKeyExplore({
+      kicker: 'Paso 2', title: 'Posición de Do: mano derecha', start: 60,
+      lead: 'La mano derecha se apoya con el pulgar en el <b>Do central</b>, y cada dedo toma una tecla blanca seguida: <b>1 Do, 2 Re, 3 Mi, 4 Fa, 5 Sol</b>. Toca cada tecla.',
+      allowed: function (m) { return fOf('RH', m) > 0; }, need: 5, label: lab(RHM),
+      describe: function (m) { var f = fOf('RH', m); return ['Dedo ' + f + ' · ' + FNAMES[f - 1], 'Toca ' + nameOf(m) + '.']; },
+      notAllowed: 'Esa tecla queda fuera de la posición. Toca las cinco teclas seguidas desde el Do central.', doneText: 'Esa es la posición de cinco dedos.',
+      startTitle: 'Toca las cinco teclas', startText: 'Cada tecla muestra el número del dedo que la toca.'
+    }));
+    s.push(stepKeyExplore({
+      kicker: 'Paso 3', title: 'Posición de Do: mano izquierda', start: 48,
+      lead: 'La mano izquierda es un reflejo de la derecha: el meñique va en el Do grave y el pulgar llega al Sol. <b>5 Do, 4 Re, 3 Mi, 2 Fa, 1 Sol</b>. Toca cada tecla.',
+      allowed: function (m) { return fOf('LH', m) > 0; }, need: 5, label: lab(LHM),
+      describe: function (m) { var f = fOf('LH', m); return ['Dedo ' + f + ' · ' + FNAMES[f - 1], 'Toca ' + nameOf(m) + '.']; },
+      notAllowed: 'Esa tecla queda fuera de la posición. Toca las cinco teclas seguidas desde el Do grave.', doneText: 'Los números bajan al subir: 5 4 3 2 1.',
+      startTitle: 'Toca las cinco teclas', startText: 'Con la izquierda, los números van al revés.'
+    }));
+    shuffle([['RH', 2], ['RH', 4], ['LH', 3], ['LH', 2], ['RH', 5], ['LH', 1]]).slice(0, 3).forEach(function (p) { s.push(stepFingerKey(p[0], p[1])); });
+    shuffle([['RH', 2], ['RH', 3], ['RH', 5], ['LH', 4], ['LH', 2], ['LH', 1]]).slice(0, 3).forEach(function (p) { s.push(stepStaffFinger(p[0], p[1])); });
+    s.push(stepFingerScale('RH'));
+    s.push(stepFingerScale('LH'));
+    s.push(stepChoice({
+      title: 'El pulgar pasa por debajo', lead: 'Subiendo la escala de Do mayor con la mano derecha, los dedos son 1 2 3 y luego… ¿qué dedo pasa por debajo de la mano después del 3?',
+      fig: function (ok) { var m = {}; m[65] = ok === null ? 'active' : ok ? 'ok' : 'bad'; return keyboardSVG({ start: 60, whites: 8, marks: m }); },
+      options: [{ k: 1, t: 'El pulgar (1)' }, { k: 2, t: 'El índice (2)' }, { k: 4, t: 'El anular (4)' }, { k: 5, t: 'El meñique (5)' }], correct: 1,
+      hint: 'Es el dedo más corto y móvil de la mano.', wrong: 'Era el pulgar',
+      explain: 'El <b>pulgar</b> pasa por debajo para tocar el Fa y la mano sigue subiendo sin cambiar de posición bruscamente.', sound: function () { playMidi(65); }
+    }));
+    var labR = {}, labL = {}; [1, 2, 3, 4, 5].forEach(function (f) { labR[RHM[f]] = f; labL[LHM[f]] = f; });
+    s.push(stepSummary(7, {
+      title: 'Ya sabes qué dedo usar',
+      fig: keyboardSVG({ start: 60, whites: 8, labels: labR, label: 'Mano derecha' }) + keyboardSVG({ start: 48, whites: 8, labels: labL, label: 'Mano izquierda' }),
+      hint: 'Arriba, la derecha (1 a 5 desde el Do central). Abajo, la izquierda (5 a 1). Toca las teclas.',
+      bindFig: function (r) { bindKeysAll(r, playMidi); }
+    }));
+    return s;
+  }
+
+  // ===================== LECCIÓN 8: INTERVALOS =====================
+  var INT = [
+    { s: 1, n: '2ª menor', c: '2ª m', d: 'Dos notas pegadas: suena tensa.' },
+    { s: 2, n: '2ª mayor', c: '2ª M', d: 'Un tono: suena abierta y cercana.' },
+    { s: 3, n: '3ª menor', c: '3ª m', d: 'Suena suave y algo triste.' },
+    { s: 4, n: '3ª mayor', c: '3ª M', d: 'Suena brillante y alegre.' },
+    { s: 5, n: '4ª justa', c: '4ª J', d: 'Suena firme y estable.' },
+    { s: 6, n: 'Tritono', c: 'Tritono', d: 'También se llama 4ª aumentada. Es muy inestable: pide resolver.' },
+    { s: 7, n: '5ª justa', c: '5ª J', d: 'Suena amplia y muy estable. Es la quinta de los acordes.' },
+    { s: 8, n: '6ª menor', c: '6ª m', d: 'Suena cálida y melancólica.' },
+    { s: 9, n: '6ª mayor', c: '6ª M', d: 'Suena abierta y dulce.' },
+    { s: 10, n: '7ª menor', c: '7ª m', d: 'Suena tensa y pide resolver.' },
+    { s: 11, n: '7ª mayor', c: '7ª M', d: 'Muy tensa: casi llega a la octava.' },
+    { s: 12, n: '8ª justa', c: '8ª J', d: 'La misma nota, una octava más aguda.' }
+  ];
+  var ORD = ['Unísono', '2ª', '3ª', '4ª', '5ª', '6ª', '7ª', '8ª (octava)'];
+
+  function stepIntervalStaff() {
+    return function () {
+      stageEl.innerHTML = head('Paso 1', 'Medir la distancia', 'Un <b>intervalo</b> es la distancia entre dos notas. Se cuenta con números, incluyendo la nota de partida: de Do a Mi son 3 notas (Do, Re, Mi), una <b>tercera</b>. Toca el pentagrama para elegir la segunda nota.') + figHTML();
+      var fig = $('fig'), seen = {}, n = 0, target = null;
+      function draw() {
+        var notes = [{ step: -2, x: 130, label: 'Do' }];
+        if (target !== null) notes.push({ step: target, x: 230, state: 'active', label: info(target, 'treble').es });
+        fig.innerHTML = staffSVG({ notes: notes, label: 'Do y una segunda nota' });
+        bind(fig, { onPos: tap });
+      }
+      function tap(st) {
+        if (st < -2 || st > 5) return;
+        target = st; if (!seen[st]) { seen[st] = 1; n++; }
+        playSeq([60, info(st, 'treble').midi], 550); draw();
+        var names = []; for (var k = -2; k <= st; k++) names.push(info(k, 'treble').es);
+        var ord = st + 3, ttl = 'Do → ' + info(st, 'treble').es + ': ' + (ord === 1 ? 'unísono' : ORD[ord - 1]);
+        var txt = 'Cuenta: ' + names.join(', ') + '.';
+        if (n >= 5) { setFb('ok', ttl, txt + ' Ya sabes contar intervalos.'); unlock(); } else setFb('info', ttl, txt + ' Prueba ' + (5 - n) + ' más.');
+      }
+      draw(); setFb('info', 'Toca una posición', 'Elige cualquier línea o espacio entre el Do central y el Do agudo.');
+    };
+  }
+
+  function stepIntervalChips() {
+    return function () {
+      stageEl.innerHTML = head('Paso 2', 'Mayor, menor y justo', 'El número no basta: una tercera puede ser <b>mayor</b> (4 semitonos) o <b>menor</b> (3). Las cuartas, quintas y octavas son <b>justas</b>. Elige cada intervalo desde Do y mira cuántos semitonos tiene.') +
+        '<div class="chips" id="chips"></div>' + figBox('fig') + '<div class="tools"><button class="btn ghost" id="hearI">▶ Escuchar juntas</button></div>' + fbBox();
+      var sel = 3, seen = { 3: 1 }, n = 1;
+      function draw(first) {
+        $('chips').innerHTML = INT.map(function (it, i) { return '<button class="chip' + (seen[i] ? ' seen' : '') + '" data-i="' + i + '" aria-pressed="' + (i === sel) + '">' + it.c + '</button>'; }).join('');
+        var it = INT[sel], mk = {}, lb = {}; mk[60] = 'active'; mk[60 + it.s] = 'active'; lb[60 + it.s] = it.s;
+        $('fig').innerHTML = keyboardSVG({ start: 60, whites: 8, marks: mk, labels: lb, label: 'Do y la nota ' + it.s + ' semitonos arriba' });
+        bindKeys($('fig'), playMidi);
+        var txt = it.n + ' · ' + plural(it.s, 'semitono', 'semitonos') + '. ' + it.d;
+        if (n >= 6) { setFb('ok', it.n, txt + ' Ya viste varios intervalos.'); unlock(); } else setFb('info', it.n, txt + ' Mira ' + (6 - n) + ' más.');
+      }
+      $('chips').addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.chip') : null; if (!b) return;
+        sel = +b.getAttribute('data-i'); if (!seen[sel]) { seen[sel] = 1; n++; }
+        draw(); clearTimers(); playSeq([60, 60 + INT[sel].s], 550);
+      });
+      $('hearI').addEventListener('click', function () { clearTimers(); playChord([60, 60 + INT[sel].s], 0); });
+      draw();
+    };
+  }
+  function stepJustoQ() {
+    return stepChoice({
+      title: '¿Cuál puede ser justo?', lead: 'Algunos intervalos son mayores o menores; otros son siempre justos. ¿Cuál de estos puede ser justo?',
+      fig: function () { return keyboardSVG({ start: 60, whites: 8 }); },
+      options: [{ k: 3, t: '3ª' }, { k: 5, t: '5ª' }, { k: 6, t: '6ª' }, { k: 7, t: '7ª' }], correct: 5,
+      hint: 'Los justos son la 4ª, la 5ª y la 8ª.', wrong: 'Era la 5ª',
+      explain: 'La <b>5ª</b> es justa. Las 4ª, 5ª y 8ª son justas; las 2ª, 3ª, 6ª y 7ª son mayores o menores.'
+    });
+  }
+  function stepSemQ(s) {
+    var it = INT[s - 1], opts = pick(INT.map(function (x) { return x.s; }).filter(function (x) { return x !== s && Math.abs(x - s) <= 3; }), 3).concat([s]).sort(function (a, b) { return a - b; });
+    return stepChoice({
+      title: '¿Cuántos semitonos?', lead: '¿Cuántos semitonos tiene una <b>' + it.n + '</b>?',
+      fig: function (ok) { var m = {}; if (ok !== null) { m[60] = ok ? 'ok' : 'bad'; m[60 + s] = ok ? 'ok' : 'bad'; } return keyboardSVG({ start: 60, whites: 8, marks: m }); },
+      options: opts.map(function (x) { return { k: x, t: x, s: x === 1 ? 'semitono' : 'semitonos' }; }), correct: s,
+      hint: 'Cuenta cada tecla, blanca o negra, desde Do.', wrong: 'Eran ' + s,
+      explain: 'Una ' + it.n.toLowerCase() + ' tiene <b>' + plural(s, 'semitono', 'semitonos') + '</b>. ' + it.d,
+      sound: function () { playSeq([60, 60 + s], 550); }
+    });
+  }
+  function stepIdentQ(r, s) {
+    var it = INT[s - 1], others = pick(INT.filter(function (x) { return x.s !== s; }), 3), opts = others.concat([it]).sort(function (a, b) { return a.s - b.s; });
+    return stepChoice({
+      title: '¿Qué intervalo es?', lead: 'Cuenta los semitonos entre las dos teclas marcadas y elige el intervalo.',
+      fig: function (ok) { var m = {}; m[r] = ok === null ? 'active' : ok ? 'ok' : 'bad'; m[r + s] = m[r]; return keyboardSVG({ start: 60, whites: 12, marks: m }); },
+      options: opts.map(function (x) { return { k: x.s, t: x.n }; }), correct: s, cols: '1fr 1fr',
+      hint: 'Semitonos: 1 y 2 son segundas, 3 y 4 terceras, 5 cuarta, 7 quinta, 12 octava.', wrong: 'Era ' + it.n.toLowerCase(),
+      explain: 'Hay <b>' + plural(s, 'semitono', 'semitonos') + '</b> entre ' + nameOf(r) + ' y ' + nameOf(r + s) + ': es una <b>' + it.n.toLowerCase() + '</b>.',
+      sound: function () { playSeq([r, r + s], 550); }
+    });
+  }
+  function stepIntervalEar(s) {
+    var r = 60 + Math.floor(Math.random() * 6), pool = [3, 4, 5, 7, 12];
+    var opts = pick(pool.filter(function (x) { return x !== s; }), 2).concat([s]).sort(function (a, b) { return a - b; });
+    return stepEarPick({
+      title: '¿Qué intervalo suena?', lead: 'Pulsa ▶: oirás las dos notas una tras otra y luego juntas. Elige el intervalo.',
+      options: opts.map(function (x) { return { k: x, t: INT[x - 1].n }; }), correct: s, cols: '1fr',
+      play: function () { playSeq([r, r + s], 650); timers.push(setTimeout(function () { playChord([r, r + s], 0); }, 1700)); }, ms: 2800,
+      hint: 'Las terceras suenan dulces, la cuarta y la quinta firmes y la octava se funde.', wrong: 'Era ' + INT[s - 1].n.toLowerCase(),
+      explain: 'Era una <b>' + INT[s - 1].n.toLowerCase() + '</b>. ' + INT[s - 1].d
+    });
+  }
+  function stepStaffInterval(base, ord) {
+    var top = base + ord - 1, names = []; for (var k = base; k <= top; k++) names.push(info(k, 'treble').es);
+    var opts = pick([2, 3, 4, 5, 6, 7, 8].filter(function (x) { return x !== ord; }), 3).concat([ord]).sort(function (a, b) { return a - b; });
+    return stepChoice({
+      title: '¿Qué intervalo es?', lead: 'Cuenta las notas desde la primera hasta la segunda, incluyendo ambas.',
+      fig: function (ok) {
+        var st = ok === null ? '' : ok ? 'ok' : 'bad';
+        return staffSVG({ notes: [{ step: base, x: 140, state: st }, { step: top, x: 230, state: st }], label: 'Dos notas' });
+      },
+      options: opts.map(function (x) { return { k: x, t: ORD[x - 1] }; }), correct: ord,
+      hint: 'Incluye la nota de partida en la cuenta.', wrong: 'Era una ' + ORD[ord - 1],
+      explain: 'Cuenta: ' + names.join(', ') + ' = ' + ord + ' notas: una <b>' + ORD[ord - 1] + '</b>.',
+      sound: function () { playSeq([info(base, 'treble').midi, info(top, 'treble').midi], 600); }
+    });
+  }
+  var SONGS = [
+    { s: 2, t: 'Martinillo (Frère Jacques)', w: 'Las dos primeras notas: Do–Re.' },
+    { s: 3, t: 'Greensleeves', w: 'La primera subida: La–Do.' },
+    { s: 5, t: 'Marcha nupcial', w: 'El primer salto: Do–Fa.' },
+    { s: 7, t: 'Estrellita, ¿dónde estás?', w: 'El salto entre "Es-tre" y "lli-ta": Do–Sol.' },
+    { s: 12, t: 'Somewhere Over the Rainbow', w: 'El salto entre "Some" y "where": una octava.' }
+  ];
+  function stepSongs() {
+    return function () {
+      stageEl.innerHTML = head('Paso 3', 'Intervalos que ya conoces', 'Una forma de reconocer intervalos es recordar el comienzo de una canción. Toca cada una y escucha el salto.') +
+        '<div class="chips" id="chips"></div>' + figBox('fig') + fbBox();
+      var sel = -1, seen = {}, n = 0;
+      function draw() {
+        $('chips').innerHTML = SONGS.map(function (x, i) { return '<button class="chip' + (seen[i] ? ' seen' : '') + '" data-i="' + i + '" aria-pressed="' + (i === sel) + '">' + INT[x.s - 1].n + '</button>'; }).join('');
+        var mk = {}; if (sel >= 0) { mk[60] = 'active'; mk[60 + SONGS[sel].s] = 'active'; }
+        $('fig').innerHTML = keyboardSVG({ start: 60, whites: 8, marks: mk });
+      }
+      $('chips').addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.chip') : null; if (!b) return;
+        sel = +b.getAttribute('data-i'); if (!seen[sel]) { seen[sel] = 1; n++; }
+        draw(); clearTimers(); playSeq([60, 60 + SONGS[sel].s], 650);
+        var x = SONGS[sel], txt = INT[x.s - 1].n + ' ascendente. ' + x.w;
+        if (n >= 3) { setFb('ok', x.t, txt + ' Ya tienes referencias para reconocer intervalos.'); unlock(); } else setFb('info', x.t, txt + ' Prueba ' + (3 - n) + ' más.');
+      });
+      draw(); setFb('info', 'Elige un intervalo', 'Cada botón toca el salto desde Do y te dice con qué canción asociarlo.');
+    };
+  }
+  function buildIntervals() {
+    var s = [stepIntervalStaff(), stepIntervalChips(), stepJustoQ()];
+    pick([2, 3, 4, 5, 7, 9, 12], 3).forEach(function (x) { s.push(stepSemQ(x)); });
+    s.push(stepSongs());
+    pick([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], 4).forEach(function (x) { s.push(stepIdentQ(60 + Math.floor(Math.random() * 8), x)); });
+    pick([3, 4, 5, 7, 12], 3).forEach(function (x) { s.push(stepIntervalEar(x)); });
+    pick([2, 3, 4, 5, 6, 7, 8], 3).forEach(function (o) { s.push(stepStaffInterval(pick([-2, -1, 0, 1, 2], 1)[0], o)); });
+    var lb = {}; for (var k = 0; k <= 12; k++) lb[60 + k] = k;
+    s.push(stepSummary(8, {
+      title: 'Ya mides intervalos',
+      fig: keyboardSVG({ start: 60, whites: 8, labels: lb, label: 'Semitonos desde Do' }),
+      hint: 'Cada tecla muestra su distancia en semitonos desde Do. Toca una para oír el intervalo.',
+      bindFig: function (r) { bindKeys(r, function (m) { clearTimers(); playSeq([60, m], 550); }); }
+    }));
+    return s;
+  }
+
+
+  // ===================== LECCIÓN 9: ACORDES E INVERSIONES =====================
+  var TRI = {
+    M: { iv: [0, 4, 7], n: 'mayor', d: '3ª mayor (4 semitonos) + 3ª menor (3 semitonos)' },
+    m: { iv: [0, 3, 7], n: 'menor', d: '3ª menor (3 semitonos) + 3ª mayor (4 semitonos)' },
+    d: { iv: [0, 3, 6], n: 'disminuido', d: '3ª menor (3 semitonos) + 3ª menor (3 semitonos)' }
+  };
+  var INV_N = ['Posición fundamental', '1ª inversión', '2ª inversión'];
+  function chName(root, q) { return SN[pcOf(root)] + ' ' + TRI[q].n; }
+  function chMidis(root, q) { return TRI[q].iv.map(function (i) { return root + i; }); }
+  function invMidis(root, q, inv) { var n = chMidis(root, q); for (var k = 0; k < inv; k++) n.push(n.shift() + 12); return n; }
+  var DIA = [{ r: 60, q: 'M', st: -2 }, { r: 62, q: 'm', st: -1 }, { r: 64, q: 'm', st: 0 }, { r: 65, q: 'M', st: 1 }, { r: 67, q: 'M', st: 2 }, { r: 69, q: 'm', st: 3 }, { r: 71, q: 'd', st: 4 }];
+  function chordStaff(steps, x, label, state) {
+    return steps.map(function (st, i) { return { step: st, x: x, nostem: true, state: state || '', label: i === 0 ? label : '' }; });
+  }
+  function chordMarks(ms, kind, bass) {
+    var m = {}; ms.forEach(function (x) { m[x] = kind; }); if (bass !== undefined) m[bass] = 'active'; return m;
+  }
+
+  function stepStack() {
+    return function () {
+      stageEl.innerHTML = head('Paso 1', 'Un acorde se apila de tercera en tercera',
+        'Un <b>acorde</b> son varias notas que suenan juntas. La <b>tríada</b> tiene tres: una nota base (la <b>fundamental</b>), su tercera y su quinta, saltando una nota cada vez. Sobre Do, toca la <b>tercera</b> (Mi) y después la <b>quinta</b> (Sol).') + figHTML();
+      var fig = $('fig'), shown = [-2];
+      function draw() {
+        fig.innerHTML = staffSVG({ notes: chordStaff(shown, 210, shown.length === 3 ? 'Do mayor' : 'Do', shown.length === 3 ? 'ok' : ''), label: 'Do con su tercera y su quinta' });
+        bind(fig, { onPos: tap });
+      }
+      function tap(st) {
+        if (shown.length >= 3) return;
+        var want = shown.length === 1 ? 0 : 2;
+        if (st === want) {
+          shown.push(st); draw();
+          if (shown.length === 3) { playChord([60, 64, 67], 45); setFb('ok', 'Do mayor', 'Do, Mi y Sol: tres notas separadas por terceras. Ese es un acorde de <b>Do mayor</b>.'); unlock(); }
+          else { playMidi(64); setFb('info', 'Tercera: Mi', 'Contaste Do, Re, Mi. Ahora sube otra tercera desde Mi.'); }
+        } else {
+          setFb('bad', 'Casi', shown.length === 1 ? 'Cuenta desde Do: Do (1), Re (2), Mi (3). Busca la nota que salta una.' : 'Desde Mi cuenta: Mi (1), Fa (2), Sol (3). Salta una nota otra vez.');
+        }
+      }
+      draw(); setFb('info', 'Empieza por la tercera', 'Toca la posición de Mi en el pentagrama. Se salta una nota, igual que las líneas del pentagrama.');
+    };
+  }
+
+  function stepDiatonic() {
+    return function () {
+      stageEl.innerHTML = head('Paso 2', 'Un acorde sobre cada nota de la escala', 'Si apilas terceras sobre cada nota de la escala de Do mayor obtienes siete acordes. Unos son <b>mayores</b>, otros <b>menores</b> y uno <b>disminuido</b>. Elige cada uno.') +
+        '<div class="chips" id="chips"></div>' + figBox('fig') + figBox('kb') + fbBox();
+      var sel = 0, seen = { 0: 1 }, n = 1;
+      function draw() {
+        $('chips').innerHTML = DIA.map(function (c, i) { return '<button class="chip' + (seen[i] ? ' seen' : '') + '" data-i="' + i + '" aria-pressed="' + (i === sel) + '">' + SN[pcOf(c.r)] + (c.q === 'm' ? ' m' : c.q === 'd' ? ' dim' : '') + '</button>'; }).join('');
+        var c = DIA[sel], ms = chMidis(c.r, c.q);
+        $('fig').innerHTML = staffSVG({ notes: chordStaff([c.st, c.st + 2, c.st + 4], 210, '', 'active'), label: 'Acorde de ' + chName(c.r, c.q) });
+        $('kb').innerHTML = keyboardSVG({ start: 60, whites: 12, marks: chordMarks(ms, 'active') });
+        bindKeys($('kb'), playMidi);
+        var txt = TRI[c.q].d + '.';
+        if (n >= 5) { setFb('ok', chName(c.r, c.q), txt + ' Ya viste varios acordes de la escala.'); unlock(); } else setFb('info', chName(c.r, c.q), txt + ' Mira ' + (5 - n) + ' más.');
+      }
+      $('chips').addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.chip') : null; if (!b) return;
+        sel = +b.getAttribute('data-i'); if (!seen[sel]) { seen[sel] = 1; n++; }
+        draw(); clearTimers(); playChord(chMidis(DIA[sel].r, DIA[sel].q), 45);
+      });
+      draw();
+    };
+  }
+
+  function stepChordBuild(root, q) {
+    var seq = chMidis(root, q), nm = chName(root, q), ivT = [TRI[q].iv[1], TRI[q].iv[2] - TRI[q].iv[1]];
+    return function () {
+      stageEl.innerHTML = head('Construye', nm, 'Toca las tres notas del acorde de <b>' + nm + '</b>. Empieza por la fundamental y sube las dos terceras.') + figBox('fig') + fbBox();
+      var fig = $('fig'), pos = 0, mistakes = 0, flash = null, finished = false;
+      function draw() {
+        var mk = {}, lb = {}; for (var j = 0; j < pos; j++) { mk[seq[j]] = j === pos - 1 ? 'active' : 'ok'; lb[seq[j]] = nameOf(seq[j]); }
+        if (flash !== null) mk[flash] = 'bad';
+        fig.innerHTML = keyboardSVG({ start: 60, whites: 12, marks: mk, labels: lb }); bindKeys(fig, tap);
+      }
+      function prompt() {
+        if (pos === 0) setFb('info', 'Fundamental', 'Toca la nota base: <b>' + nameOf(root) + '</b>.');
+        else setFb('info', pos === 1 ? 'Tercera' : 'Quinta', 'Sube <b>' + plural(ivT[pos - 1], 'semitono', 'semitonos') + '</b> desde ' + nameOf(seq[pos - 1]) + ' (' + (ivT[pos - 1] === 4 ? '3ª mayor' : '3ª menor') + ').');
+      }
+      function tap(m) {
+        if (finished) return;
+        if (m === seq[pos]) {
+          playMidi(m); flash = null; pos++; draw();
+          if (pos === 3) { finished = true; results.push(mistakes === 0); timers.push(setTimeout(function () { playChord(seq, 0); }, 250)); setFb('ok', '¡' + cap(nm) + '!', TRI[q].d + '.'); unlock(); }
+          else prompt();
+        } else {
+          mistakes++; flash = m; playMidi(m); draw();
+          setFb('bad', 'Esa no es', pos === 0 ? 'La fundamental es ' + nameOf(root) + '.' : 'Esa tecla está a ' + plural(Math.abs(m - seq[pos - 1]), 'semitono', 'semitonos') + ' de ' + nameOf(seq[pos - 1]) + ' y hacen falta ' + plural(ivT[pos - 1], 'semitono', 'semitonos') + '.');
+          var my = pos; timers.push(setTimeout(function () { if (!finished && pos === my && flash === m) { flash = null; draw(); } }, 700));
+        }
+      }
+      draw(); prompt();
+    };
+  }
+  function stepChordEar(minor) {
+    var r = pick([60, 62, 64, 65, 67, 69], 1)[0], q = minor ? 'm' : 'M', ms = chMidis(r, q);
+    return stepEarPick({
+      title: '¿Mayor o menor?', lead: 'Pulsa ▶: oirás el acorde arpegiado y luego junto. Los mayores suenan brillantes; los menores, más oscuros.',
+      options: [{ k: 'M', t: 'Mayor' }, { k: 'm', t: 'Menor' }], correct: q,
+      play: function () { playChord(ms, 260); timers.push(setTimeout(function () { playChord(ms, 0); }, 1300)); }, ms: 2300,
+      wrong: 'Era ' + (minor ? 'menor' : 'mayor'),
+      explain: 'Era un acorde <b>' + (minor ? 'menor' : 'mayor') + '</b>: ' + TRI[q].d + '.'
+    });
+  }
+  function stepChordNameQ(r, q) {
+    var ms = chMidis(r, q), nm = chName(r, q), alt = chName(r, q === 'M' ? 'm' : 'M');
+    var pool = [60, 62, 64, 65, 67].filter(function (x) { return x !== r; }), o1 = pick(pool, 2);
+    var names = [nm, alt, chName(o1[0], q), chName(o1[1], q === 'M' ? 'm' : 'M')], opts = shuffle(names);
+    return stepChoice({
+      title: '¿Qué acorde es?', lead: 'Fíjate en la nota más grave (la fundamental) y en la distancia a la tercera.',
+      fig: function (ok) { return keyboardSVG({ start: 60, whites: 12, marks: chordMarks(ms, ok === null ? 'active' : ok ? 'ok' : 'bad') }); },
+      options: opts.map(function (x) { return { k: x, t: x }; }), correct: nm, cols: '1fr 1fr',
+      hint: 'Cuenta los semitonos de la fundamental a la tercera: 4 es mayor, 3 es menor.', wrong: 'Era ' + nm,
+      explain: 'La fundamental es ' + nameOf(r) + ' y la tercera está a ' + plural(TRI[q].iv[1], 'semitono', 'semitonos') + ': es <b>' + nm + '</b>.',
+      sound: function () { playChord(ms, 0); }
+    });
+  }
+
+  function stepInvIntro() {
+    return function () {
+      stageEl.innerHTML = head('Paso 3', 'Mismas notas, distinto bajo', 'Una <b>inversión</b> cambia qué nota queda abajo. En <b>posición fundamental</b> abajo va la fundamental; en <b>1ª inversión</b>, la tercera; en <b>2ª inversión</b>, la quinta. Mira Do mayor en sus tres formas.') +
+        '<div class="chips" id="chips"></div>' + figBox('fig') + figBox('kb') + fbBox();
+      var STEPS = [[-2, 0, 2], [0, 2, 5], [2, 5, 7]], TXT = [
+        'La nota más grave es la fundamental: <b>Do</b>. Las notas se apilan de tercera en tercera.',
+        'La más grave es la tercera: <b>Mi</b>. Aparece un hueco de cuarta entre Sol y Do.',
+        'La más grave es la quinta: <b>Sol</b>. El hueco de cuarta queda entre Sol y Do.'];
+      var sel = 0, seen = { 0: 1 }, n = 1;
+      function draw() {
+        $('chips').innerHTML = INV_N.map(function (x, i) { return '<button class="chip' + (seen[i] ? ' seen' : '') + '" data-i="' + i + '" aria-pressed="' + (i === sel) + '">' + x + '</button>'; }).join('');
+        var ms = invMidis(60, 'M', sel);
+        $('fig').innerHTML = staffSVG({ notes: chordStaff(STEPS[sel], 210, INV_N[sel], 'active'), label: 'Do mayor, ' + INV_N[sel] });
+        $('kb').innerHTML = keyboardSVG({ start: 60, whites: 12, marks: chordMarks(ms, 'seen', ms[0]), labels: (function () { var l = {}; ms.forEach(function (x) { l[x] = nameOf(x); }); return l; })() });
+        bindKeys($('kb'), playMidi);
+        if (n === 3) { setFb('ok', INV_N[sel], TXT[sel] + ' Truco: la nota que queda sobre el hueco de cuarta es la fundamental.'); unlock(); } else setFb('info', INV_N[sel], TXT[sel] + ' Faltan ' + (3 - n) + ' formas.');
+      }
+      $('chips').addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.chip') : null; if (!b) return;
+        sel = +b.getAttribute('data-i'); if (!seen[sel]) { seen[sel] = 1; n++; }
+        draw(); clearTimers(); playChord(invMidis(60, 'M', sel), 45);
+      });
+      draw();
+    };
+  }
+  function stepInvRead(r, inv) {
+    var q = (r === -1 || r === 0) ? 'm' : 'M', nmRoot = info(r, 'treble').es;
+    var base = [r, r + 2, r + 4], steps = inv === 0 ? base : inv === 1 ? [r + 2, r + 4, r + 7] : [r + 4, r + 7, r + 9];
+    var third = info(r + 2, 'treble').es, fifth = info(r + 4, 'treble').es, bassN = info(steps[0], 'treble').es;
+    var midis = steps.map(function (s) { return info(s, 'treble').midi; });
+    return stepChoice({
+      title: '¿Qué inversión es?', lead: 'Busca la fundamental: es la nota que queda justo arriba del hueco de una cuarta (si no hay hueco, está abajo).',
+      fig: function (ok) { return staffSVG({ notes: chordStaff(steps, 210, '', ok === null ? '' : ok ? 'ok' : 'bad'), label: 'Un acorde' }); },
+      options: INV_N.map(function (x, i) { return { k: i, t: x }; }), correct: inv, cols: '1fr',
+      hint: 'Mira qué nota queda más grave: fundamental, tercera o quinta.', wrong: 'Era ' + INV_N[inv].toLowerCase(),
+      explain: 'Es un acorde de <b>' + nmRoot + (q === 'm' ? ' menor' : ' mayor') + '</b> (' + nmRoot + '–' + third + '–' + fifth + '). La nota más grave es ' + bassN + ', ' + (inv === 0 ? 'la fundamental' : inv === 1 ? 'la tercera' : 'la quinta') + ': <b>' + INV_N[inv].toLowerCase() + '</b>.',
+      sound: function () { playChord(midis, 45); }
+    });
+  }
+  function stepInvTap(r, q, inv) {
+    var set = invMidis(r, q, inv), nm = chName(r, q);
+    return function () {
+      stageEl.innerHTML = head('Construye', nm + ', ' + INV_N[inv].toLowerCase(), 'Toca las tres notas de <b>' + nm + ' en ' + INV_N[inv].toLowerCase() + '</b>. ' + (inv === 0 ? 'Abajo va la fundamental.' : inv === 1 ? 'Abajo va la tercera.' : 'Abajo va la quinta.') + ' La nota más grave debe ser <b>' + nameOf(set[0]) + '</b>.') + figBox('fig') + fbBox();
+      var fig = $('fig'), got = {}, n = 0, mistakes = 0, flash = null, finished = false;
+      function draw() {
+        var mk = {}, lb = {}; Object.keys(got).forEach(function (k) { mk[k] = 'ok'; lb[k] = nameOf(+k); });
+        if (flash !== null) mk[flash] = 'bad';
+        fig.innerHTML = keyboardSVG({ start: 60, whites: 12, marks: mk, labels: lb }); bindKeys(fig, tap);
+      }
+      function tap(m) {
+        if (finished) return; playMidi(m);
+        if (set.indexOf(m) >= 0 && !got[m]) {
+          got[m] = 1; n++; flash = null; draw();
+          if (n === 3) { finished = true; results.push(mistakes === 0); timers.push(setTimeout(function () { playChord(set, 0); }, 250)); setFb('ok', '¡Correcto!', 'Las mismas notas de ' + nm + ', con ' + nameOf(set[0]) + ' en el bajo.'); unlock(); }
+          else setFb('info', nameOf(m), 'Faltan ' + (3 - n) + ' notas.');
+        } else if (got[m]) { setFb('info', 'Ya la tocaste', 'Busca otra de las notas del acorde.'); }
+        else {
+          mistakes++; flash = m; draw();
+          setFb('bad', 'Esa no es', 'Las notas de ' + nm + ' son ' + set.map(nameOf).join(', ') + '.');
+          timers.push(setTimeout(function () { if (!finished && flash === m) { flash = null; draw(); } }, 700));
+        }
+      }
+      draw(); setFb('info', 'Toca las tres notas', 'Pueden ir en cualquier orden.');
+    };
+  }
+  function stepInvWhy() {
+    return function () {
+      stageEl.innerHTML = head('Paso 4', 'Para qué sirven las inversiones', 'Al pasar de Do a Fa, la mano puede <b>saltar</b> o moverse muy poco usando una inversión. Compara las dos formas.') +
+        '<div class="chips" id="chips"></div>' + figBox('kb') + fbBox();
+      var OPT = [{ t: 'Con saltos', a: [60, 64, 67], b: [65, 69, 72], d: 'Las tres notas se mueven una cuarta hacia arriba: la mano salta.' },
+                 { t: 'Con inversión', a: [60, 64, 67], b: [60, 65, 69], d: 'El Do se queda quieto y las otras dos notas solo suben un poco: la mano casi no se mueve.' }];
+      var sel = -1, seen = {}, n = 0;
+      function draw() {
+        $('chips').innerHTML = OPT.map(function (o, i) { return '<button class="chip' + (seen[i] ? ' seen' : '') + '" data-i="' + i + '" aria-pressed="' + (i === sel) + '">▶ ' + o.t + '</button>'; }).join('');
+        var mk = {}; if (sel >= 0) { OPT[sel].a.forEach(function (m) { mk[m] = 'seen'; }); OPT[sel].b.forEach(function (m) { mk[m] = 'active'; }); }
+        $('kb').innerHTML = keyboardSVG({ start: 60, whites: 12, marks: mk });
+      }
+      $('chips').addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.chip') : null; if (!b) return;
+        sel = +b.getAttribute('data-i'); if (!seen[sel]) { seen[sel] = 1; n++; }
+        draw(); clearTimers(); playChord(OPT[sel].a, 0); timers.push(setTimeout(function () { playChord(OPT[sel].b, 0); }, 1100));
+        if (n === 2) { setFb('ok', OPT[sel].t, OPT[sel].d + ' Por eso los pianistas usan inversiones: suena más fluido y se toca con menos esfuerzo.'); unlock(); }
+        else setFb('info', OPT[sel].t, OPT[sel].d + ' Prueba la otra forma.');
+      });
+      draw(); setFb('info', 'Compara', 'Verás el primer acorde en claro y el segundo en dorado. Escucha cómo se unen.');
+    };
+  }
+  function buildChords() {
+    var s = [stepStack(), stepDiatonic()];
+    s.push(stepChordBuild(60, 'M'), stepChordBuild(60, 'm'), stepChordBuild(pick([67, 62], 1)[0], pick(['M', 'm'], 1)[0]));
+    shuffle([false, true, pick([false, true], 1)[0]]).forEach(function (mn) { s.push(stepChordEar(mn)); });
+    shuffle([[60, 'M'], [62, 'm'], [64, 'm'], [65, 'M'], [67, 'M'], [69, 'm'], [61, 'M'], [63, 'm']]).slice(0, 3).forEach(function (p) { s.push(stepChordNameQ(p[0], p[1])); });
+    s.push(stepInvIntro());
+    [[-2, 1], [1, 0], [0, 2], [2, 1]].forEach(function (p) { s.push(stepInvRead(p[0], p[1])); });
+    shuffle([[60, 'M', 1], [60, 'M', 2], [65, 'M', 1], [67, 'M', 1], [62, 'm', 1], [62, 'm', 2], [64, 'm', 1]]).slice(0, 2).forEach(function (p) { s.push(stepInvTap(p[0], p[1], p[2])); });
+    s.push(stepInvWhy());
+    var allN = [], gx = [110, 190, 270], G = [[-2, 0, 2], [0, 2, 5], [2, 5, 7]], LB = ['Fund.', '1ª inv.', '2ª inv.'];
+    G.forEach(function (g, gi) { g.forEach(function (st, i) { allN.push({ step: st, x: gx[gi], nostem: true, tap: true, label: i === 0 ? LB[gi] : '', aria: 'Do mayor, ' + INV_N[gi] }); }); });
+    s.push(stepSummary(9, {
+      title: 'Ya conoces los acordes y sus inversiones',
+      fig: staffSVG({ notes: allN, label: 'Do mayor en posición fundamental y sus dos inversiones' }),
+      hint: 'Do mayor en sus tres formas. Toca cualquier nota para oír el acorde.',
+      bindFig: function (r) { bind(r, { onNote: function (i) { playChord(invMidis(60, 'M', Math.floor(i / 3)), 45); } }); }
+    }));
+    return s;
+  }
+
+  // ===================== LECCIÓN 10: PEDALES DEL PIANO =====================
+  var PED = {
+    L: { n: 'Pedal izquierdo', a: 'una corda o suave', d: 'Suaviza el sonido y lo hace más apagado. Sirve para pasajes tranquilos.' },
+    C: { n: 'Pedal central', a: 'sostenuto', d: 'Mantiene sonando solo las notas que ya estaban pulsadas cuando lo pisas. En muchos pianos verticales es un pedal de estudio que apaga el sonido.' },
+    R: { n: 'Pedal derecho', a: 'de resonancia, sustain o forte', d: 'Deja sonar todas las notas aunque sueltes las teclas. Es el que más se usa.' }
+  };
+  function pedalSVG(o) {
+    o = o || {};
+    var P = [{ k: 'L', t: 'Izquierdo' }, { k: 'C', t: 'Central' }, { k: 'R', t: 'Derecho' }];
+    var s = '<svg class="rs" viewBox="0 0 360 150" role="group" aria-label="Los tres pedales del piano">';
+    P.forEach(function (p, i) {
+      var cx = 60 + i * 120, on = !!(o.on && o.on[p.k]), dy = on ? 10 : 0;
+      var cls = 'pedal' + (o.sel === p.k ? ' sel' : '') + (on ? ' on' : '') + (o.state && o.state[p.k] ? ' ' + o.state[p.k] : '') + (o.tap ? ' tap' : '');
+      s += '<g class="' + cls + '" data-p="' + p.k + '"' + (o.tap ? ' role="button" tabindex="0" aria-label="Pedal ' + p.t.toLowerCase() + '"' : '') + '>' +
+        '<rect class="rod" x="' + (cx - 4) + '" y="8" width="8" height="' + (56 + dy) + '" rx="3"/>' +
+        '<rect class="pd" x="' + (cx - 44) + '" y="' + (62 + dy) + '" width="88" height="46" rx="10"/>' +
+        '<text x="' + cx + '" y="136">' + p.t + '</text></g>';
+    });
+    return s + '</svg>';
+  }
+  function barsSVG(rows) {
+    var s = '<svg class="rs" viewBox="0 0 360 ' + (rows.length * 34 + 10) + '" role="img" aria-label="Comparación de duración y volumen">';
+    rows.forEach(function (r, i) {
+      var y = 8 + i * 34;
+      s += '<text class="lbl" x="8" y="' + (y + 16) + '">' + r.l + '</text><rect class="seg" x="140" y="' + y + '" width="212" height="22" rx="4"/>';
+      if (r.v > 0) s += '<rect class="seg now" x="140" y="' + y + '" width="' + (212 * r.v) + '" height="22" rx="4"/>';
+    });
+    return s + '</svg>';
+  }
+  // Demostración con dos botones (sin pedal / con pedal).
+  function stepPedalDemo(c) {
+    return function () {
+      stageEl.innerHTML = head(c.kicker, c.title, c.lead) + figBox('fig') +
+        '<div class="tools"><button class="btn ghost" id="off">' + c.offLabel + '</button><button class="btn" id="on">' + c.onLabel + '</button></div>' + fbBox();
+      var fig = $('fig'), heard = {}, n = 0, playing = false, bOff = $('off'), bOn = $('on');
+      function draw(on, rows) { var o = {}; o[c.key] = on; fig.innerHTML = pedalSVG({ sel: c.key, on: o }) + barsSVG(rows); }
+      draw(false, c.rows(null));
+      setFb('info', 'Compara', 'Pulsa los dos botones y escucha la diferencia.');
+      function run(on) {
+        if (playing) return; playing = true; bOff.disabled = true; bOn.disabled = true; clearTimers();
+        draw(on, c.rows(on)); c.play(on);
+        timers.push(setTimeout(function () {
+          playing = false; bOff.disabled = false; bOn.disabled = false;
+          var k = on ? 'on' : 'off'; if (!heard[k]) { heard[k] = 1; n++; }
+          var txt = on ? c.txtOn : c.txtOff;
+          if (n === 2) { setFb('ok', on ? c.onLabel : c.offLabel, txt + ' ' + c.done); unlock(); } else setFb('info', on ? c.onLabel : c.offLabel, txt + ' Prueba la otra opción.');
+        }, c.ms));
+      }
+      bOff.addEventListener('click', function () { run(false); });
+      bOn.addEventListener('click', function () { run(true); });
+    };
+  }
+  function stepPedalIntro() {
+    return function () {
+      stageEl.innerHTML = head('Paso 1', 'Los tres pedales', 'Un piano de cola tiene tres pedales, que se pisan con el pie. De izquierda a derecha: <b>una corda</b>, <b>sostenuto</b> y <b>de resonancia</b>. Toca cada uno.') + figBox('fig') + fbBox();
+      var sel = null, seen = {}, n = 0, fig = $('fig');
+      function draw() { fig.innerHTML = pedalSVG({ tap: true, sel: sel, on: sel ? (function () { var o = {}; o[sel] = true; return o; })() : null }); }
+      function pickP(e) {
+        var g = e.target.closest ? e.target.closest('.pedal') : null; if (!g) return;
+        sel = g.getAttribute('data-p'); if (!seen[sel]) { seen[sel] = 1; n++; }
+        draw(); var p = PED[sel], txt = p.d;
+        if (n === 3) { setFb('ok', p.n + ' (' + p.a + ')', txt + ' Ya conoces los tres.'); unlock(); } else setFb('info', p.n + ' (' + p.a + ')', txt + ' Faltan ' + (3 - n) + '.');
+      }
+      fig.addEventListener('click', pickP);
+      fig.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickP(e); } });
+      draw(); setFb('info', 'Toca un pedal', 'Al tocarlo se baja, como cuando lo pisas.');
+    };
+  }
+  function demoSustain(on) { [60, 64, 67].forEach(function (m) { playNote(m, on ? 3.4 : 0.35); }); }
+  function demoUna(on) {
+    var ph = [64, 67, 72, 67, 64];
+    ph.forEach(function (m, i) { timers.push(setTimeout(function () { playNote(m, 0.45, on ? { gain: 0.5, dark: 0.45 } : null); }, i * 430)); });
+  }
+  function demoSost(on) {
+    playNote(60, on ? 3.4 : 0.5); playNote(64, on ? 3.4 : 0.5);
+    timers.push(setTimeout(function () { playNote(67, 0.35); }, 900));
+    timers.push(setTimeout(function () { playNote(69, 0.35); }, 1500));
+  }
+  function stepPedalMarks() {
+    return function () {
+      stageEl.innerHTML = head('Paso 5', 'Cómo se escribe el pedal', 'En la partitura, <b>Ped.</b> significa pisar el pedal derecho y el signo <b>✱</b> significa soltarlo. La línea entre los dos marca cuánto dura. Escucha la misma frase sin pedal y con pedal.') +
+        figBox('fig') + '<div class="tools"><button class="btn ghost" id="off">Sin pedal</button><button class="btn" id="on">Con Ped. … ✱</button></div>' + fbBox();
+      var fig = $('fig'), heard = {}, n = 0, playing = false, bOff = $('off'), bOn = $('on');
+      var ST = [-2, 0, 2, 5], XS = [110, 165, 220, 275], MS = [60, 64, 67, 72];
+      var MARK = '<text class="pedmark" x="40" y="160">Ped.</text><line class="sl" x1="82" x2="300" y1="154" y2="154"/><text class="pedmark" x="310" y="160">✱</text>';
+      function draw(on) { fig.innerHTML = staffSVG({ notes: ST.map(function (s, i) { return { step: s, x: XS[i] }; }), extra: on ? MARK : '', label: 'Cuatro notas con y sin pedal' }); }
+      draw(false); setFb('info', 'Compara', 'Son las mismas cuatro notas.');
+      function run(on) {
+        if (playing) return; playing = true; bOff.disabled = true; bOn.disabled = true; clearTimers(); draw(on);
+        MS.forEach(function (m, i) { timers.push(setTimeout(function () { playNote(m, on ? 3.2 - i * 0.55 : 0.4); }, i * 550)); });
+        timers.push(setTimeout(function () {
+          playing = false; bOff.disabled = false; bOn.disabled = false;
+          var k = on ? 'on' : 'off'; if (!heard[k]) { heard[k] = 1; n++; }
+          var txt = on ? 'Con pedal las cuatro notas se quedan sonando juntas hasta el signo ✱.' : 'Sin pedal cada nota se corta cuando sueltas la tecla.';
+          if (n === 2) { setFb('ok', on ? 'Con pedal' : 'Sin pedal', txt + ' Así se lee la indicación en la partitura.'); unlock(); } else setFb('info', on ? 'Con pedal' : 'Sin pedal', txt + ' Prueba la otra.');
+        }, 4200));
+      }
+      bOff.addEventListener('click', function () { run(false); });
+      bOn.addEventListener('click', function () { run(true); });
+    };
+  }
+  function stepPedalChange() {
+    return function () {
+      stageEl.innerHTML = head('Paso 6', 'Cambiar el pedal con la armonía', 'Si el pedal se queda pisado mientras cambian los acordes, todo se mezcla. Lo correcto es <b>soltarlo y volver a pisarlo</b> justo cuando cambia el acorde. Escucha Do, Fa y Sol de las dos formas.') +
+        figBox('fig') + '<div class="tools"><button class="btn ghost" id="off">Pedal siempre pisado</button><button class="btn" id="on">Pedal que cambia</button></div>' + fbBox();
+      var fig = $('fig'), heard = {}, n = 0, playing = false, bOff = $('off'), bOn = $('on');
+      var CH = [[60, 64, 67], [65, 69, 72], [67, 71, 74]], STP = [[-2, 0, 2], [1, 3, 5], [2, 4, 6]], XS = [110, 200, 290], T = [0, 1300, 2600];
+      function marks(on) {
+        if (on === null) return '';
+        if (!on) return '<text class="pedmark" x="40" y="160">Ped.</text><line class="sl" x1="82" x2="318" y1="154" y2="154"/><text class="pedmark" x="326" y="160">✱</text>';
+        var s = ''; XS.forEach(function (x) { s += '<text class="pedmark" x="' + (x - 30) + '" y="160">Ped.</text><line class="sl" x1="' + (x - 4) + '" x2="' + (x + 34) + '" y1="154" y2="154"/><text class="pedmark" x="' + (x + 38) + '" y="160">✱</text>'; });
+        return s;
+      }
+      function draw(on) {
+        var nt = []; STP.forEach(function (g, gi) { g.forEach(function (st) { nt.push({ step: st, x: XS[gi], nostem: true }); }); });
+        fig.innerHTML = staffSVG({ notes: nt, extra: marks(on), label: 'Acordes de Do, Fa y Sol' });
+      }
+      draw(null); setFb('info', 'Compara', 'Escucha primero una forma y luego la otra.');
+      function run(on) {
+        if (playing) return; playing = true; bOff.disabled = true; bOn.disabled = true; clearTimers(); draw(on);
+        CH.forEach(function (ch, gi) { timers.push(setTimeout(function () { ch.forEach(function (m) { playNote(m, on ? 1.25 : 3.9 - T[gi] / 1000); }); }, T[gi])); });
+        timers.push(setTimeout(function () {
+          playing = false; bOff.disabled = false; bOn.disabled = false;
+          var k = on ? 'on' : 'off'; if (!heard[k]) { heard[k] = 1; n++; }
+          var txt = on ? 'Cada acorde suena limpio porque el pedal se suelta justo cuando cambia la armonía.' : 'Los tres acordes se mezclan y el sonido queda borroso.';
+          if (n === 2) { setFb('ok', on ? 'Pedal que cambia' : 'Pedal siempre pisado', txt + ' Regla: cambia el pedal cuando cambia el acorde.'); unlock(); } else setFb('info', on ? 'Pedal que cambia' : 'Pedal siempre pisado', txt + ' Prueba la otra.');
+        }, 4600));
+      }
+      bOff.addEventListener('click', function () { run(false); });
+      bOn.addEventListener('click', function () { run(true); });
+    };
+  }
+  function stepPedalQ(k) {
+    var QS = { L: 'Quieres tocar más suave y con un sonido más apagado.', R: 'Quieres que las notas sigan sonando aunque levantes las manos.', C: 'Quieres que suenen solo las notas que ya tienes pulsadas.' };
+    return stepChoice({
+      title: '¿Qué pedal usas?', lead: QS[k],
+      fig: function (ok) { var st = {}; if (ok !== null) st[k] = ok ? 'ok' : 'bad'; return pedalSVG({ state: st }); },
+      options: [{ k: 'L', t: 'Izquierdo (una corda)' }, { k: 'C', t: 'Central (sostenuto)' }, { k: 'R', t: 'Derecho (resonancia)' }], correct: k, cols: '1fr',
+      hint: 'Piensa en lo que hace cada pedal.', wrong: 'Era el ' + PED[k].n.toLowerCase().replace('pedal ', ''),
+      explain: '<b>' + PED[k].n + '</b> (' + PED[k].a + '). ' + PED[k].d
+    });
+  }
+  function stepPedalEar(kind) {
+    var NM = { N: 'Ningún pedal', L: 'Pedal izquierdo (una corda)', R: 'Pedal derecho (resonancia)' }, ph = [64, 67, 72];
+    return stepEarPick({
+      title: '¿Qué pedal suena?', lead: 'Pulsa ▶ y escucha tres notas. Decide si se usó algún pedal.',
+      options: [{ k: 'N', t: NM.N }, { k: 'L', t: NM.L }, { k: 'R', t: NM.R }], correct: kind, cols: '1fr',
+      play: function () {
+        ph.forEach(function (m, i) {
+          timers.push(setTimeout(function () {
+            if (kind === 'R') playNote(m, 3.3 - i * 0.5); else if (kind === 'L') playNote(m, 0.4, { gain: 0.5, dark: 0.45 }); else playNote(m, 0.4);
+          }, i * 500));
+        });
+      }, ms: 3400,
+      hint: 'Con el derecho las notas se quedan sonando; con el izquierdo suenan más suaves.', wrong: 'Era: ' + NM[kind].toLowerCase(),
+      explain: kind === 'R' ? 'Las notas siguieron sonando después de soltarlas: <b>pedal derecho</b>.' : kind === 'L' ? 'Sonó más suave y apagado: <b>pedal izquierdo</b> (una corda).' : 'Cada nota se cortó al soltarla y con volumen normal: <b>ningún pedal</b>.'
+    });
+  }
+  function stepPedalMarkQ() {
+    return stepChoice({
+      title: 'Leer la partitura', lead: 'Bajo el pentagrama aparece <b>Ped.</b> al comienzo de una frase y <b>✱</b> al final. ¿Qué indica el signo ✱?',
+      fig: function (ok) { return staffSVG({ notes: [{ step: -2, x: 120 }, { step: 1, x: 190 }, { step: 4, x: 260 }], extra: '<text class="pedmark" x="40" y="160">Ped.</text><line class="sl" x1="82" x2="300" y1="154" y2="154"/><text class="pedmark" x="310" y="160">✱</text>', label: 'Pedal indicado en la partitura' }); },
+      options: [{ k: 'a', t: 'Soltar el pedal' }, { k: 'b', t: 'Pisar el pedal' }, { k: 'c', t: 'Tocar más fuerte' }, { k: 'd', t: 'Repetir la frase' }], correct: 'a', cols: '1fr 1fr',
+      hint: 'Ped. es pisar; el otro signo es lo contrario.', wrong: 'Era soltar el pedal',
+      explain: '<b>Ped.</b> pisa el pedal y <b>✱</b> lo suelta. La línea entre ambos marca el tiempo que dura.'
+    });
+  }
+  function stepPedalWhenQ() {
+    return stepChoice({
+      title: '¿Cuándo cambiar el pedal?', lead: 'Estás tocando una pieza con el pedal derecho y la armonía cambia de Do a Fa. ¿Qué haces?',
+      fig: function (ok) { var nt = []; [[-2, 0, 2], [1, 3, 5]].forEach(function (g, gi) { g.forEach(function (st) { nt.push({ step: st, x: 150 + gi * 100, nostem: true, state: ok === null ? '' : ok ? 'ok' : '' }); }); }); return staffSVG({ notes: nt, label: 'Cambio de acorde de Do a Fa' }); },
+      options: [{ k: 'a', t: 'Suelto y piso de nuevo justo al cambiar el acorde' }, { k: 'b', t: 'Lo dejo pisado todo el rato' }, { k: 'c', t: 'Lo suelto y no lo uso más' }, { k: 'd', t: 'Lo piso solo al final de la pieza' }], correct: 'a', cols: '1fr',
+      hint: 'Los acordes distintos no deben mezclarse.', wrong: 'Era soltar y pisar al cambiar',
+      explain: 'Se cambia el pedal <b>cuando cambia la armonía</b>: así cada acorde suena limpio y sin mezclarse con el anterior.'
+    });
+  }
+  function buildPedals() {
+    var s = [stepPedalIntro()];
+    s.push(stepPedalDemo({
+      kicker: 'Paso 2', title: 'El pedal derecho: resonancia', key: 'R',
+      lead: 'Al pisar el pedal derecho se levantan los apagadores y las cuerdas siguen vibrando aunque sueltes las teclas. Toca un acorde de Do mayor con y sin pedal.',
+      offLabel: 'Sin pedal', onLabel: 'Con pedal derecho', ms: 3800,
+      rows: function (on) { return [{ l: 'Tecla pulsada', v: on === null ? 0 : 0.35 / 3.6 }, { l: 'Sonido', v: on === null ? 0 : (on ? 3.4 : 0.35) / 3.6 }]; },
+      play: demoSustain,
+      txtOff: 'Al soltar la tecla, el apagador detiene la cuerda y el sonido se corta.',
+      txtOn: 'El sonido sigue mucho después de soltar la tecla y se apaga poco a poco.', done: 'Es el pedal que más usarás.'
+    }));
+    s.push(stepPedalDemo({
+      kicker: 'Paso 3', title: 'El pedal izquierdo: una corda', key: 'L',
+      lead: 'El pedal izquierdo desplaza el mecanismo y los martillos golpean menos cuerdas. El resultado es un sonido más suave y apagado. Escucha una frase corta.',
+      offLabel: 'Sin pedal', onLabel: 'Con pedal izquierdo', ms: 2500,
+      rows: function (on) { return [{ l: 'Volumen', v: on === null ? 0 : (on ? 0.5 : 1) }, { l: 'Brillo', v: on === null ? 0 : (on ? 0.45 : 1) }]; },
+      play: demoUna,
+      txtOff: 'Volumen y brillo normales.', txtOn: 'Baja el volumen y el timbre se vuelve más oscuro y delicado.', done: 'Úsalo en pasajes suaves.'
+    }));
+    s.push(stepPedalDemo({
+      kicker: 'Paso 4', title: 'El pedal central: sostenuto', key: 'C',
+      lead: 'El pedal central mantiene solo las notas que ya estaban pulsadas cuando lo pisas. Aquí se pulsan Do y Mi, se pisa el pedal, se sueltan las teclas y luego se tocan Sol y La.',
+      offLabel: 'Sin pedal', onLabel: 'Con pedal central', ms: 2600,
+      rows: function (on) { return [{ l: 'Do y Mi', v: on === null ? 0 : (on ? 0.94 : 0.14) }, { l: 'Sol y La', v: on === null ? 0 : 0.1 }]; },
+      play: demoSost,
+      txtOff: 'Todas las notas se cortan al soltar las teclas.', txtOn: 'Do y Mi siguen sonando, pero Sol y La, tocadas después, se cortan normal.', done: 'Se usa poco; en muchos pianos verticales no funciona así.'
+    }));
+    s.push(stepPedalMarks(), stepPedalChange());
+    shuffle(['L', 'C', 'R']).forEach(function (k) { s.push(stepPedalQ(k)); });
+    pick(['N', 'L', 'R'], 2).forEach(function (k) { s.push(stepPedalEar(k)); });
+    s.push(stepPedalMarkQ(), stepPedalWhenQ());
+    s.push(stepSummary(10, {
+      title: 'Ya conoces los pedales',
+      fig: pedalSVG({ tap: true }),
+      hint: 'Izquierdo: suave. Central: sostenuto. Derecho: resonancia. Toca uno para recordar su función.',
+      bindFig: function (r) {
+        r.addEventListener('click', function (e) {
+          var g = e.target.closest ? e.target.closest('.pedal') : null; if (!g) return;
+          var k = g.getAttribute('data-p'); r.innerHTML = pedalSVG({ tap: true, sel: k, on: (function () { var o = {}; o[k] = true; return o; })() });
+          var h = document.querySelector('.hint'); if (h) h.innerHTML = '<b>' + PED[k].n + ':</b> ' + PED[k].d;
+        });
+      }
+    }));
+    return s;
+  }
+
+
+  var BUILD = { 1: buildL1, 2: buildBass, 3: buildValues, 4: buildMeter, 5: buildL2, 6: buildL3, 7: buildFinger, 8: buildIntervals, 9: buildChords, 10: buildPedals };
 
   function startLesson(n) {
-    lessonN = n; results = []; curClef = n === 2 ? 'bass' : 'treble'; frame();
+    lessonN = n; pianoOn = n >= 7; results = []; curClef = n === 2 ? 'bass' : 'treble'; frame();
     steps = BUILD[n]();
     go(0);
   }
@@ -1772,5 +2631,6 @@ h2 { font: 800 clamp(26px, 6.5vw, 34px)/1.1 var(--f-display); letter-spacing: -.
   home();
 })();
 </script>
+
 </body>
 </html>
