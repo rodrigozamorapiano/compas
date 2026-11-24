@@ -2180,6 +2180,14 @@ h2 { font: 700 clamp(32px, 8vw, 42px)/1.05 var(--f-display); letter-spacing: 0; 
   };
   var INV_N = ['Posición fundamental', '1ª inversión', '2ª inversión'];
   function chName(root, q) { return SN[pcOf(root)] + ' ' + TRI[q].n; }
+  // Nombre de una nota dentro de un acorde, con la ortografía correcta (Do menor: Do, Mi♭, Sol).
+  function nameIn(m, root, q) {
+    var rl = { 0: 0, 2: 1, 4: 2, 5: 3, 7: 4, 9: 5, 11: 6 }[pcOf(root)];
+    var k = TRI[q].iv.indexOf(((m - root) % 12 + 12) % 12);
+    if (rl === undefined || k < 0) return nameOf(m);
+    var letter = LETTERS[(rl + 2 * k) % 7], acc = ((pcOf(m) - SEMI[letter] + 18) % 12) - 6;
+    return ES[letter] + accSym(acc);
+  }
   function chMidis(root, q) { return TRI[q].iv.map(function (i) { return root + i; }); }
   function invMidis(root, q, inv) { var n = chMidis(root, q); for (var k = 0; k < inv; k++) n.push(n.shift() + 12); return n; }
   var DIA = [{ r: 60, q: 'M', st: -2 }, { r: 62, q: 'm', st: -1 }, { r: 64, q: 'm', st: 0 }, { r: 65, q: 'M', st: 1 }, { r: 67, q: 'M', st: 2 }, { r: 69, q: 'm', st: 3 }, { r: 71, q: 'd', st: 4 }];
@@ -2243,13 +2251,13 @@ h2 { font: 700 clamp(32px, 8vw, 42px)/1.05 var(--f-display); letter-spacing: 0; 
       stageEl.innerHTML = head('Construye', nm, 'Toca las tres notas del acorde de <b>' + nm + '</b>. Empieza por la fundamental y sube las dos terceras.') + figBox('fig') + fbBox();
       var fig = $('fig'), pos = 0, mistakes = 0, flash = null, finished = false;
       function draw() {
-        var mk = {}, lb = {}; for (var j = 0; j < pos; j++) { mk[seq[j]] = j === pos - 1 ? 'active' : 'ok'; lb[seq[j]] = nameOf(seq[j]); }
+        var mk = {}, lb = {}; for (var j = 0; j < pos; j++) { mk[seq[j]] = j === pos - 1 ? 'active' : 'ok'; lb[seq[j]] = nameIn(seq[j], root, q); }
         if (flash !== null) mk[flash] = 'bad';
         fig.innerHTML = keyboardSVG({ start: 60, whites: 12, marks: mk, labels: lb }); bindKeys(fig, tap);
       }
       function prompt() {
-        if (pos === 0) setFb('info', 'Fundamental', 'Toca la nota base: <b>' + nameOf(root) + '</b>.');
-        else setFb('info', pos === 1 ? 'Tercera' : 'Quinta', 'Sube <b>' + plural(ivT[pos - 1], 'semitono', 'semitonos') + '</b> desde ' + nameOf(seq[pos - 1]) + ' (' + (ivT[pos - 1] === 4 ? '3ª mayor' : '3ª menor') + ').');
+        if (pos === 0) setFb('info', 'Fundamental', 'Toca la nota base: <b>' + nameIn(root, root, q) + '</b>.');
+        else setFb('info', pos === 1 ? 'Tercera' : 'Quinta', 'Sube <b>' + plural(ivT[pos - 1], 'semitono', 'semitonos') + '</b> desde ' + nameIn(seq[pos - 1], root, q) + ' (' + (ivT[pos - 1] === 4 ? '3ª mayor' : '3ª menor') + ').');
       }
       function tap(m) {
         if (finished) return;
@@ -2259,7 +2267,7 @@ h2 { font: 700 clamp(32px, 8vw, 42px)/1.05 var(--f-display); letter-spacing: 0; 
           else prompt();
         } else {
           mistakes++; flash = m; playMidi(m); draw();
-          setFb('bad', 'Esa no es', pos === 0 ? 'La fundamental es ' + nameOf(root) + '.' : 'Esa tecla está a ' + plural(Math.abs(m - seq[pos - 1]), 'semitono', 'semitonos') + ' de ' + nameOf(seq[pos - 1]) + ' y hacen falta ' + plural(ivT[pos - 1], 'semitono', 'semitonos') + '.');
+          setFb('bad', 'Esa no es', pos === 0 ? 'La fundamental es ' + nameIn(root, root, q) + '.' : 'Esa tecla está a ' + plural(Math.abs(m - seq[pos - 1]), 'semitono', 'semitonos') + ' de ' + nameIn(seq[pos - 1], root, q) + ' y hacen falta ' + plural(ivT[pos - 1], 'semitono', 'semitonos') + '.');
           var my = pos; timers.push(setTimeout(function () { if (!finished && pos === my && flash === m) { flash = null; draw(); } }, 700));
         }
       }
@@ -2303,7 +2311,7 @@ h2 { font: 700 clamp(32px, 8vw, 42px)/1.05 var(--f-display); letter-spacing: 0; 
         $('chips').innerHTML = INV_N.map(function (x, i) { return '<button class="chip' + (seen[i] ? ' seen' : '') + '" data-i="' + i + '" aria-pressed="' + (i === sel) + '">' + x + '</button>'; }).join('');
         var ms = invMidis(60, 'M', sel);
         $('fig').innerHTML = staffSVG({ notes: chordStaff(STEPS[sel], 210, INV_N[sel], 'active'), label: 'Do mayor, ' + INV_N[sel] });
-        $('kb').innerHTML = keyboardSVG({ start: 60, whites: 12, marks: chordMarks(ms, 'seen', ms[0]), labels: (function () { var l = {}; ms.forEach(function (x) { l[x] = nameOf(x); }); return l; })() });
+        $('kb').innerHTML = keyboardSVG({ start: 60, whites: 12, marks: chordMarks(ms, 'seen', ms[0]), labels: (function () { var l = {}; ms.forEach(function (x) { l[x] = nameIn(x, 60, 'M'); }); return l; })() });
         bindKeys($('kb'), playMidi);
         if (n === 3) { setFb('ok', INV_N[sel], TXT[sel] + ' Truco: la nota que queda sobre el hueco de cuarta es la fundamental.'); unlock(); } else setFb('info', INV_N[sel], TXT[sel] + ' Faltan ' + (3 - n) + ' formas.');
       }
@@ -2332,10 +2340,10 @@ h2 { font: 700 clamp(32px, 8vw, 42px)/1.05 var(--f-display); letter-spacing: 0; 
   function stepInvTap(r, q, inv) {
     var set = invMidis(r, q, inv), nm = chName(r, q);
     return function () {
-      stageEl.innerHTML = head('Construye', nm + ', ' + INV_N[inv].toLowerCase(), 'Toca las tres notas de <b>' + nm + ' en ' + INV_N[inv].toLowerCase() + '</b>. ' + (inv === 0 ? 'Abajo va la fundamental.' : inv === 1 ? 'Abajo va la tercera.' : 'Abajo va la quinta.') + ' La nota más grave debe ser <b>' + nameOf(set[0]) + '</b>.') + figBox('fig') + fbBox();
+      stageEl.innerHTML = head('Construye', nm + ', ' + INV_N[inv].toLowerCase(), 'Toca las tres notas de <b>' + nm + ' en ' + INV_N[inv].toLowerCase() + '</b>. ' + (inv === 0 ? 'Abajo va la fundamental.' : inv === 1 ? 'Abajo va la tercera.' : 'Abajo va la quinta.') + ' La nota más grave debe ser <b>' + nameIn(set[0], r, q) + '</b>.') + figBox('fig') + fbBox();
       var fig = $('fig'), got = {}, n = 0, mistakes = 0, flash = null, finished = false;
       function draw() {
-        var mk = {}, lb = {}; Object.keys(got).forEach(function (k) { mk[k] = 'ok'; lb[k] = nameOf(+k); });
+        var mk = {}, lb = {}; Object.keys(got).forEach(function (k) { mk[k] = 'ok'; lb[k] = nameIn(+k, r, q); });
         if (flash !== null) mk[flash] = 'bad';
         fig.innerHTML = keyboardSVG({ start: 60, whites: 12, marks: mk, labels: lb }); bindKeys(fig, tap);
       }
@@ -2343,12 +2351,12 @@ h2 { font: 700 clamp(32px, 8vw, 42px)/1.05 var(--f-display); letter-spacing: 0; 
         if (finished) return; playMidi(m);
         if (set.indexOf(m) >= 0 && !got[m]) {
           got[m] = 1; n++; flash = null; draw();
-          if (n === 3) { finished = true; results.push(mistakes === 0); timers.push(setTimeout(function () { playChord(set, 0); }, 250)); setFb('ok', '¡Correcto!', 'Las mismas notas de ' + nm + ', con ' + nameOf(set[0]) + ' en el bajo.'); unlock(); }
-          else setFb('info', nameOf(m), 'Faltan ' + (3 - n) + ' notas.');
+          if (n === 3) { finished = true; results.push(mistakes === 0); timers.push(setTimeout(function () { playChord(set, 0); }, 250)); setFb('ok', '¡Correcto!', 'Las mismas notas de ' + nm + ', con ' + nameIn(set[0], r, q) + ' en el bajo.'); unlock(); }
+          else setFb('info', nameIn(m, r, q), 'Faltan ' + (3 - n) + ' notas.');
         } else if (got[m]) { setFb('info', 'Ya la tocaste', 'Busca otra de las notas del acorde.'); }
         else {
           mistakes++; flash = m; draw();
-          setFb('bad', 'Esa no es', 'Las notas de ' + nm + ' son ' + set.map(nameOf).join(', ') + '.');
+          setFb('bad', 'Esa no es', 'Las notas de ' + nm + ' son ' + set.map(function (x) { return nameIn(x, r, q); }).join(', ') + '.');
           timers.push(setTimeout(function () { if (!finished && flash === m) { flash = null; draw(); } }, 700));
         }
       }
